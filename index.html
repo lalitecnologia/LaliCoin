@@ -453,23 +453,82 @@ async function loadMiners(){
   renderMiners();
 }
 
+let editingMinerId = null;
+
 function renderMiners(){
   const list = document.getElementById('miners-list');
   if (!myMiners.length){
     list.innerHTML = '<div class="empty-state">Nenhum miner cadastrado ainda.</div>';
     return;
   }
-  list.innerHTML = myMiners.map(m => `
+  list.innerHTML = myMiners.map(m => {
+    if (m.id === editingMinerId){
+      return `
+        <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div class="field" style="margin-bottom:0;">
+            <label>Nome do miner</label>
+            <input type="text" id="edit-nome-${m.id}" value="${escapeHtml(m.nome)}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Poder (H/s)</label>
+            <input type="number" step="any" min="0" id="edit-poder-${m.id}" value="${m.poder}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Bônus (%)</label>
+            <input type="number" step="any" min="0" id="edit-bonus-${m.id}" value="${m.bonus}">
+          </div>
+          <div style="display:flex; gap:8px; margin-top:4px;">
+            <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveMinerEdit('${m.id}')">Salvar</button>
+            <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="cancelMinerEdit()">Cancelar</button>
+          </div>
+        </div>
+      `;
+    }
+    return `
     <div class="miner-row">
       <div class="miner-info">
         <div class="name">${escapeHtml(m.nome)}</div>
         <div class="stats">Poder: ${m.poder} · Bônus: ${m.bonus}%</div>
       </div>
       <div class="miner-actions">
+        <button class="icon-btn" onclick="startMinerEdit('${m.id}')" title="Editar">✎</button>
         <button class="icon-btn" onclick="deleteMiner('${m.id}')" title="Remover">✕</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
+}
+
+function startMinerEdit(id){
+  editingMinerId = id;
+  renderMiners();
+}
+
+function cancelMinerEdit(){
+  editingMinerId = null;
+  renderMiners();
+}
+
+async function saveMinerEdit(id){
+  const nome = document.getElementById(`edit-nome-${id}`).value.trim();
+  const poder = parseFloat(document.getElementById(`edit-poder-${id}`).value);
+  const bonus = parseFloat(document.getElementById(`edit-bonus-${id}`).value);
+
+  if (!nome || isNaN(poder) || isNaN(bonus)){
+    showToast('Preencha todos os campos corretamente.');
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from('miners').update({ nome, poder, bonus }).eq('id', id);
+
+  if (error){
+    showToast('Erro ao salvar alterações.');
+    return;
+  }
+  editingMinerId = null;
+  showToast('Miner atualizado.');
+  await loadMiners();
 }
 
 async function handleAddMiner(e){
