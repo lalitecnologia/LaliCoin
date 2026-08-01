@@ -384,6 +384,11 @@ function formatarPoderEm(valorHs, unidade){
   return (valorHs / fator).toLocaleString('pt-BR', {maximumFractionDigits:3}) + ' ' + unidade;
 }
 
+// Formata um número simples no padrão brasileiro (vírgula decimal)
+function fmtNum(n){
+  return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
 // Descobre a unidade predominante usada pelos miners de um combo (a mais usada; empate = a maior)
 function unidadeReferencia(combo){
   const contagem = {};
@@ -552,7 +557,7 @@ function renderMiners(){
     <div class="miner-row">
       <div class="miner-info">
         <div class="name">${escapeHtml(m.nome)}</div>
-        <div class="stats">Poder: ${m.poder} ${m.unidade || 'H/s'} · Bônus: ${m.bonus}%</div>
+        <div class="stats">Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}%</div>
       </div>
       <div class="miner-actions">
         <button class="icon-btn" onclick="startMinerEdit('${m.id}')" title="Editar">✎</button>
@@ -683,8 +688,8 @@ function calcularMelhorRack(){
           <div class="slot">
             <div class="num">SLOT ${i + 1}</div>
             <div class="name">${escapeHtml(m.nome)}</div>
-            <div class="stat">Poder <b>${m.poder} ${m.unidade || 'H/s'}</b></div>
-            <div class="stat">Bônus <b>${m.bonus}%</b></div>
+            <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
+            <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
           </div>
         `).join('')}
       </div>
