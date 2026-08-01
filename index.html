@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>LaliCoin · Rack Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0B0E14;
+    --surface:#141924;
+    --surface-2:#1B2230;
+    --border:#262E3D;
+    --gold:#E8B93E;
+    --gold-dim:#8A6F27;
+    --teal:#3EC6C0;
+    --text:#E9EAEE;
+    --muted:#8B93A7;
+    --danger:#E1554A;
+    --success:#4CAF6D;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(circle at 20% -10%, rgba(232,185,62,0.08), transparent 40%),
+      radial-gradient(circle at 100% 0%, rgba(62,198,192,0.06), transparent 45%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{font-family:'Space Grotesk', sans-serif;}
+  .mono{font-family:'JetBrains Mono', monospace;}
+  button{font-family:inherit; cursor:pointer;}
+  input{font-family:inherit;}
+  a{color:var(--teal);}
+
+  /* ---------- App shell ---------- */
+  #app{display:none; flex-direction:column; min-height:100vh;}
+  #app.active{display:flex;}
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px; border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, rgba(20,25,36,0.9), rgba(20,25,36,0.4));
+    position:sticky; top:0; z-index:10; backdrop-filter:blur(8px);
+  }
+  .brand{display:flex; align-items:center; gap:10px;}
+  .coin{
+    width:30px; height:30px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #FCE8A8, var(--gold) 55%, var(--gold-dim) 100%);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk'; font-weight:700; font-size:13px; color:#241C05;
+    box-shadow:0 0 14px rgba(232,185,62,0.35);
+  }
+  .brand-name{font-weight:600; font-size:17px; letter-spacing:0.2px;}
+  .role-pill{
+    font-size:11px; padding:4px 10px; border-radius:100px;
+    border:1px solid var(--border); color:var(--muted);
+    font-family:'JetBrains Mono'; text-transform:uppercase; letter-spacing:0.06em;
+  }
+  .role-pill.creator{color:var(--gold); border-color:var(--gold-dim); background:rgba(232,185,62,0.08);}
+
+  main{flex:1; padding:20px; padding-bottom:96px; max-width:640px; width:100%; margin:0 auto;}
+  .screen{display:none; animation:fade .25s ease;}
+  .screen.active{display:block;}
+  @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:18px; margin-bottom:14px;
+  }
+  .section-title{font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:12px;}
+
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px;}
+  .field input, .field select{
+    width:100%; padding:11px 12px; border-radius:10px;
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text);
+    font-size:14px; outline:none; transition:border-color .15s;
+  }
+  .field input:focus, .field select:focus{border-color:var(--gold-dim);}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    width:100%; padding:13px 16px; border-radius:10px; border:none;
+    font-weight:600; font-size:14px; transition:transform .1s, filter .15s;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{background:linear-gradient(135deg, var(--gold), #C79B2E); color:#20180A;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:transparent; color:var(--text); border:1px solid var(--border);}
+  .btn-ghost:hover{border-color:var(--gold-dim);}
+  .btn-danger{background:rgba(225,85,74,0.12); color:var(--danger); border:1px solid rgba(225,85,74,0.3);}
+  .btn-sm{width:auto; padding:8px 12px; font-size:12px;}
+
+  .error-msg{color:var(--danger); font-size:13px; margin-top:8px; display:none;}
+  .hint{color:var(--muted); font-size:12px; margin-top:10px; text-align:center;}
+
+  /* ---------- Auth ---------- */
+  #auth-screen{
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:28px;
+  }
+  .auth-box{width:100%; max-width:380px;}
+  .auth-hero{text-align:center; margin-bottom:28px;}
+  .auth-hero .coin{width:56px; height:56px; font-size:22px; margin:0 auto 14px;}
+  .auth-hero h1{font-size:24px; margin-bottom:6px;}
+  .auth-hero p{color:var(--muted); font-size:13px;}
+  .tabs-toggle{display:flex; background:var(--surface-2); border-radius:10px; padding:4px; margin-bottom:20px;}
+  .tabs-toggle button{
+    flex:1; background:transparent; border:none; padding:9px; border-radius:8px;
+    color:var(--muted); font-weight:600; font-size:13px;
+  }
+  .tabs-toggle button.active{background:var(--surface); color:var(--gold);}
+
+  /* ---------- Miners list ---------- */
+  .miner-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 0; border-bottom:1px solid var(--border);
+  }
+  .miner-row:last-child{border-bottom:none;}
+  .miner-info .name{font-weight:600; font-size:14px;}
+  .miner-info .stats{font-size:12px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:2px;}
+  .miner-actions{display:flex; gap:8px;}
+  .icon-btn{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface-2); color:var(--muted); font-size:13px;
+  }
+  .icon-btn:hover{color:var(--text); border-color:var(--gold-dim);}
+  .empty-state{text-align:center; padding:30px 10px; color:var(--muted); font-size:13px;}
+
+  /* ---------- Cálculo / Rack ---------- */
+  .rack{
+    display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin:16px 0;
+  }
+  .slot{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
+    padding:12px; position:relative; overflow:hidden;
+  }
+  .slot::before{
+    content:''; position:absolute; top:0; left:0; width:3px; height:100%;
+    background:linear-gradient(180deg, var(--gold), var(--teal));
+  }
+  .slot .num{font-size:10px; color:var(--muted); font-family:'JetBrains Mono';}
+  .slot .name{font-weight:600; font-size:14px; margin:3px 0 6px;}
+  .slot .stat{font-size:11px; color:var(--muted); font-family:'JetBrains Mono';}
+  .slot .stat b{color:var(--teal);}
+
+  .result-summary{
+    display:flex; justify-content:space-between; text-align:center;
+    background:var(--surface-2); border:1px solid var(--gold-dim); border-radius:12px;
+    padding:16px; margin-top:6px;
+  }
+  .result-summary .metric .val{font-family:'JetBrains Mono'; font-size:18px; font-weight:700; color:var(--gold);}
+  .result-summary .metric .lbl{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:4px;}
+
+  .alt-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--border); font-size:12px;
+  }
+  .alt-item:last-child{border-bottom:none;}
+  .alt-item .names{color:var(--muted); font-family:'JetBrains Mono'; font-size:11px;}
+  .alt-item .score{font-family:'JetBrains Mono'; color:var(--teal); font-weight:600;}
+
+  /* ---------- Bottom nav ---------- */
+  .bottom-nav{
+    position:fixed; bottom:0; left:0; right:0; z-index:20;
+    display:flex; border-top:1px solid var(--border);
+    background:rgba(11,14,20,0.92); backdrop-filter:blur(10px);
+    padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+  }
+  .nav-btn{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
+    background:none; border:none; color:var(--muted); font-size:10px; padding:6px; border-radius:10px;
+  }
+  .nav-btn .ic{font-size:18px;}
+  .nav-btn.active{color:var(--gold);}
+
+  .toast{
+    position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    padding:10px 16px; border-radius:10px; font-size:13px; z-index:50;
+    display:none; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= AUTH SCREEN ================= -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="auth-hero">
+      <div class="coin">LC</div>
+      <h1>LaliCoin</h1>
+      <p>Otimizador de rack para mineração — RollerCoin</p>
+    </div>
+
+    <div class="tabs-toggle">
+      <button id="tab-login" class="active" onclick="switchAuthTab('login')">Entrar</button>
+      <button id="tab-signup" onclick="switchAuthTab('signup')">Cadastrar</button>
+    </div>
+
+    <form id="form-login" onsubmit="return handleLogin(event)">
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" id="login-email" required placeholder="voce@email.com">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="login-password" required placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn btn-primary">Entrar</button>
+      <div class="error-msg" id="login-error"></div>
+    </form>
+
+    <form id="form-signup" style="display:none;" onsubmit="return handleSignup(event)">
+      <div class="field">
+        <label>Nome</label>
+        <input type="text" id="signup-name" required placeholder="Seu nome">
+      </div>
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" id="signup-email" required placeholder="voce@email.com">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="signup-password" required minlength="6" placeholder="mínimo 6 caracteres">
+      </div>
+      <button type="submit" class="btn btn-primary">Criar conta</button>
+      <div class="error-msg" id="signup-error"></div>
+      <p class="hint">Novas contas entram como usuário padrão (U).</p>
+    </form>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="coin">LC</div>
+      <div class="brand-name">LaliCoin</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span class="role-pill" id="role-pill">U</span>
+      <button class="icon-btn" onclick="handleLogout()" title="Sair">⏻</button>
+    </div>
+  </div>
+
+  <main>
+    <!-- MINERS -->
+    <section id="screen-miners" class="screen active">
+      <div class="card">
+        <div class="section-title">Cadastrar miner</div>
+        <form onsubmit="return handleAddMiner(event)">
+          <div class="field">
+            <label>Nome do miner</label>
+            <input type="text" id="miner-nome" required placeholder="Ex: Quantum X7">
+          </div>
+          <div class="field">
+            <label>Poder (H/s)</label>
+            <input type="number" id="miner-poder" required step="any" min="0" placeholder="Ex: 1500">
+          </div>
+          <div class="field">
+            <label>Bônus (%)</label>
+            <input type="number" id="miner-bonus" required step="any" min="0" placeholder="Ex: 12.5">
+          </div>
+          <button type="submit" class="btn btn-primary">Adicionar miner</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Seus miners</div>
+        <div id="miners-list"><div class="empty-state">Nenhum miner cadastrado ainda.</div></div>
+      </div>
+    </section>
+
+    <!-- CÁLCULO -->
+    <section id="screen-calculo" class="screen">
+      <div class="card">
+        <div class="section-title">Melhor combinação de rack (4 slots)</div>
+        <p style="font-size:13px; color:var(--muted); line-height:1.5;">
+          Calcula a melhor combinação de 4 miners para o rack. Miners com o mesmo nome não podem
+          ocupar o mesmo rack juntos — o cálculo é: some o poder dos 4 miners, depois aplique a soma
+          dos bônus sobre esse total.
+        </p>
+        <button class="btn btn-primary" style="margin-top:14px;" onclick="calcularMelhorRack()">Calcular melhor rack</button>
+      </div>
+
+      <div id="resultado-calculo"></div>
+    </section>
+
+    <!-- PERFIL -->
+    <section id="screen-perfil" class="screen">
+      <div class="card">
+        <div class="section-title">Perfil</div>
+        <div class="field"><label>Nome</label><div id="perfil-nome" style="font-size:14px;">—</div></div>
+        <div class="field"><label>E-mail</label><div id="perfil-email" style="font-size:14px;">—</div></div>
+        <div class="field"><label>Tipo de conta</label><div id="perfil-tipo" style="font-size:14px;">—</div></div>
+      </div>
+      <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-screen="miners" onclick="switchScreen('miners')">
+      <span class="ic">⛏</span>Miners
+    </button>
+    <button class="nav-btn" data-screen="calculo" onclick="switchScreen('calculo')">
+      <span class="ic">▦</span>Cálculo
+    </button>
+    <button class="nav-btn" data-screen="perfil" onclick="switchScreen('perfil')">
+      <span class="ic">◎</span>Perfil
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   CONFIGURAÇÃO DO SUPABASE
+   Substitua pelos dados do seu projeto (Project Settings > API)
+   ========================================================= */
+const SUPABASE_URL = "SUA_SUPABASE_URL_AQUI";
+const SUPABASE_ANON_KEY = "SUA_SUPABASE_ANON_KEY_AQUI";
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+let currentProfile = null;
+let myMiners = [];
+
+/* ---------------- Toast ---------------- */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=> t.style.display = 'none', 2600);
+}
+
+/* ---------------- Auth tabs ---------------- */
+function switchAuthTab(tab){
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+  document.getElementById('tab-signup').classList.toggle('active', tab==='signup');
+  document.getElementById('form-login').style.display = tab==='login' ? 'block' : 'none';
+  document.getElementById('form-signup').style.display = tab==='signup' ? 'block' : 'none';
+}
+
+/* ---------------- Login ---------------- */
+async function handleLogin(e){
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error){
+    errEl.textContent = 'E-mail ou senha inválidos.';
+    errEl.style.display = 'block';
+    return false;
+  }
+  await onAuthReady(data.user);
+  return false;
+}
+
+/* ---------------- Signup ---------------- */
+async function handleSignup(e){
+  e.preventDefault();
+  const nome = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const errEl = document.getElementById('signup-error');
+  errEl.style.display = 'none';
+
+  const { data, error } = await supabaseClient.auth.signUp({
+    email, password,
+    options: { data: { nome } }
+  });
+  if (error){
+    errEl.textContent = error.message.includes('already') ? 'Este e-mail já está cadastrado.' : 'Não foi possível criar a conta.';
+    errEl.style.display = 'block';
+    return false;
+  }
+  if (data.user){
+    await onAuthReady(data.user);
+  } else {
+    showToast('Verifique seu e-mail para confirmar o cadastro.');
+  }
+  return false;
+}
+
+/* ---------------- Logout ---------------- */
+async function handleLogout(){
+  await supabaseClient.auth.signOut();
+  currentUser = null; currentProfile = null; myMiners = [];
+  document.getElementById('app').classList.remove('active');
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+/* ---------------- After auth ---------------- */
+async function onAuthReady(user){
+  currentUser = user;
+
+  // busca (ou cria) o perfil do usuário
+  let { data: profile, error } = await supabaseClient
+    .from('profiles').select('*').eq('id', user.id).maybeSingle();
+
+  if (!profile){
+    const { data: created } = await supabaseClient
+      .from('profiles')
+      .insert({ id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email, tipo: 'U' })
+      .select().maybeSingle();
+    profile = created;
+  }
+  currentProfile = profile;
+
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+
+  const pill = document.getElementById('role-pill');
+  const isCreator = profile?.tipo === 'C';
+  pill.textContent = isCreator ? 'Criador' : 'Usuário';
+  pill.classList.toggle('creator', isCreator);
+
+  document.getElementById('perfil-nome').textContent = profile?.nome || '—';
+  document.getElementById('perfil-email').textContent = user.email;
+  document.getElementById('perfil-tipo').textContent = isCreator ? 'Criador (C)' : 'Usuário (U)';
+
+  await loadMiners();
+}
+
+/* ---------------- Screens / nav ---------------- */
+function switchScreen(name){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
+}
+
+/* ---------------- Miners CRUD ---------------- */
+async function loadMiners(){
+  const { data, error } = await supabaseClient
+    .from('miners').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true });
+  myMiners = data || [];
+  renderMiners();
+}
+
+function renderMiners(){
+  const list = document.getElementById('miners-list');
+  if (!myMiners.length){
+    list.innerHTML = '<div class="empty-state">Nenhum miner cadastrado ainda.</div>';
+    return;
+  }
+  list.innerHTML = myMiners.map(m => `
+    <div class="miner-row">
+      <div class="miner-info">
+        <div class="name">${escapeHtml(m.nome)}</div>
+        <div class="stats">Poder: ${m.poder} · Bônus: ${m.bonus}%</div>
+      </div>
+      <div class="miner-actions">
+        <button class="icon-btn" onclick="deleteMiner('${m.id}')" title="Remover">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function handleAddMiner(e){
+  e.preventDefault();
+  const nome = document.getElementById('miner-nome').value.trim();
+  const poder = parseFloat(document.getElementById('miner-poder').value);
+  const bonus = parseFloat(document.getElementById('miner-bonus').value);
+
+  const { error } = await supabaseClient
+    .from('miners').insert({ user_id: currentUser.id, nome, poder, bonus });
+
+  if (error){
+    showToast('Erro ao adicionar miner.');
+    return false;
+  }
+  document.getElementById('miner-nome').value = '';
+  document.getElementById('miner-poder').value = '';
+  document.getElementById('miner-bonus').value = '';
+  showToast('Miner adicionado.');
+  await loadMiners();
+  return false;
+}
+
+async function deleteMiner(id){
+  const { error } = await supabaseClient.from('miners').delete().eq('id', id);
+  if (error){ showToast('Erro ao remover miner.'); return; }
+  showToast('Miner removido.');
+  await loadMiners();
+}
+
+/* ---------------- Cálculo do melhor rack ---------------- */
+function combinacoes(arr, k){
+  const resultado = [];
+  function backtrack(start, atual){
+    if (atual.length === k){ resultado.push([...atual]); return; }
+    for (let i = start; i < arr.length; i++){
+      atual.push(arr[i]);
+      backtrack(i + 1, atual);
+      atual.pop();
+    }
+  }
+  backtrack(0, []);
+  return resultado;
+}
+
+function calcularMelhorRack(){
+  const box = document.getElementById('resultado-calculo');
+
+  if (myMiners.length < 4){
+    box.innerHTML = `<div class="card"><div class="empty-state">Cadastre pelo menos 4 miners para calcular o rack.</div></div>`;
+    return;
+  }
+
+  const combos = combinacoes(myMiners, 4);
+  const validos = [];
+
+  for (const combo of combos){
+    const nomes = combo.map(m => m.nome);
+    const temRepetido = new Set(nomes).size !== nomes.length;
+    if (temRepetido) continue; // miners com mesmo nome não podem ocupar o mesmo rack
+
+    const poderTotal = combo.reduce((s, m) => s + Number(m.poder), 0);
+    const bonusTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
+    const valorFinal = poderTotal * (1 + bonusTotal / 100);
+
+    validos.push({ combo, poderTotal, bonusTotal, valorFinal });
+  }
+
+  if (!validos.length){
+    box.innerHTML = `<div class="card"><div class="empty-state">Nenhuma combinação válida encontrada — miners repetidos demais.</div></div>`;
+    return;
+  }
+
+  validos.sort((a, b) => b.valorFinal - a.valorFinal);
+  const melhor = validos[0];
+  const alternativas = validos.slice(1, 6);
+
+  box.innerHTML = `
+    <div class="card">
+      <div class="section-title">Melhor rack encontrado</div>
+      <div class="rack">
+        ${melhor.combo.map((m, i) => `
+          <div class="slot">
+            <div class="num">SLOT ${i + 1}</div>
+            <div class="name">${escapeHtml(m.nome)}</div>
+            <div class="stat">Poder <b>${m.poder}</b></div>
+            <div class="stat">Bônus <b>${m.bonus}%</b></div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="result-summary">
+        <div class="metric">
+          <div class="val">${melhor.poderTotal.toLocaleString('pt-BR')}</div>
+          <div class="lbl">Poder total</div>
+        </div>
+        <div class="metric">
+          <div class="val">${melhor.bonusTotal.toFixed(1)}%</div>
+          <div class="lbl">Bônus total</div>
+        </div>
+        <div class="metric">
+          <div class="val">${melhor.valorFinal.toLocaleString('pt-BR', {maximumFractionDigits:1})}</div>
+          <div class="lbl">Valor final</div>
+        </div>
+      </div>
+    </div>
+
+    ${alternativas.length ? `
+    <div class="card">
+      <div class="section-title">Próximas melhores combinações</div>
+      ${alternativas.map(a => `
+        <div class="alt-item">
+          <div class="names">${a.combo.map(m => m.nome).join(' + ')}</div>
+          <div class="score">${a.valorFinal.toLocaleString('pt-BR', {maximumFractionDigits:1})}</div>
+        </div>
+      `).join('')}
+    </div>` : ''}
+  `;
+}
+
+/* ---------------- Utils ---------------- */
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ---------------- Sessão existente ---------------- */
+(async function init(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session?.user){
+    await onAuthReady(session.user);
+  }
+})();
+</script>
+</body>
+</html>
