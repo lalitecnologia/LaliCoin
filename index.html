@@ -386,7 +386,7 @@ async function handleSignup(e){
     options: { data: { nome } }
   });
   if (error){
-    errEl.textContent = error.message.includes('already') ? 'Este e-mail já está cadastrado.' : 'Não foi possível criar a conta.';
+    errEl.textContent = error.message.includes('already') ? 'Este e-mail já está cadastrado.' : ('Erro: ' + error.message);
     errEl.style.display = 'block';
     return false;
   }
