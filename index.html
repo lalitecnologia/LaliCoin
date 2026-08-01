@@ -367,7 +367,7 @@ function paraHs(poder, unidade){
   return Number(poder) * fator;
 }
 
-// Formata um valor em H/s de volta para a unidade mais legível
+// Formata um valor em H/s de volta para a unidade mais legível (uso genérico)
 function formatarPoder(valorHs){
   const unidades = Object.entries(UNIDADES_FATOR).sort((a,b) => b[1]-a[1]);
   for (const [nome, fator] of unidades){
@@ -376,6 +376,23 @@ function formatarPoder(valorHs){
     }
   }
   return valorHs.toLocaleString('pt-BR', {maximumFractionDigits:3}) + ' H/s';
+}
+
+// Formata um valor em H/s numa unidade específica (fixa, sem trocar automaticamente)
+function formatarPoderEm(valorHs, unidade){
+  const fator = UNIDADES_FATOR[unidade] || 1;
+  return (valorHs / fator).toLocaleString('pt-BR', {maximumFractionDigits:3}) + ' ' + unidade;
+}
+
+// Descobre a unidade predominante usada pelos miners de um combo (a mais usada; empate = a maior)
+function unidadeReferencia(combo){
+  const contagem = {};
+  combo.forEach(m => {
+    const u = m.unidade || 'H/s';
+    contagem[u] = (contagem[u] || 0) + 1;
+  });
+  return Object.entries(contagem)
+    .sort((a, b) => b[1] - a[1] || UNIDADES_FATOR[b[0]] - UNIDADES_FATOR[a[0]])[0][0];
 }
 
 /* ---------------- Toast ---------------- */
@@ -641,11 +658,12 @@ function calcularMelhorRack(){
     const temRepetido = new Set(nomes).size !== nomes.length;
     if (temRepetido) continue; // miners com mesmo nome não podem ocupar o mesmo rack
 
-    const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs ?? paraHs(m.poder, m.unidade || 'H/s')), 0);
+    const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
     const bonusTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
     const valorFinal = poderTotal * (1 + bonusTotal / 100);
+    const unidadeRef = unidadeReferencia(combo);
 
-    validos.push({ combo, poderTotal, bonusTotal, valorFinal });
+    validos.push({ combo, poderTotal, bonusTotal, valorFinal, unidadeRef });
   }
 
   if (!validos.length){
@@ -672,7 +690,7 @@ function calcularMelhorRack(){
       </div>
       <div class="result-summary">
         <div class="metric">
-          <div class="val">${formatarPoder(melhor.poderTotal)}</div>
+          <div class="val">${formatarPoderEm(melhor.poderTotal, melhor.unidadeRef)}</div>
           <div class="lbl">Poder total</div>
         </div>
         <div class="metric">
@@ -680,7 +698,7 @@ function calcularMelhorRack(){
           <div class="lbl">Bônus total</div>
         </div>
         <div class="metric">
-          <div class="val">${formatarPoder(melhor.valorFinal)}</div>
+          <div class="val">${formatarPoderEm(melhor.valorFinal, melhor.unidadeRef)}</div>
           <div class="lbl">Valor final</div>
         </div>
       </div>
@@ -692,7 +710,7 @@ function calcularMelhorRack(){
       ${alternativas.map(a => `
         <div class="alt-item">
           <div class="names">${a.combo.map(m => m.nome).join(' + ')}</div>
-          <div class="score">${formatarPoder(a.valorFinal)}</div>
+          <div class="score">${formatarPoderEm(a.valorFinal, a.unidadeRef)}</div>
         </div>
       `).join('')}
     </div>` : ''}
