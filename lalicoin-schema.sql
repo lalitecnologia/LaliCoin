@@ -18,9 +18,16 @@ create table if not exists miners (
   user_id uuid references auth.users on delete cascade not null,
   nome text not null,
   poder numeric not null,
+  unidade text not null default 'H/s',
+  poder_hs numeric not null default 0,
   bonus numeric not null,
   created_at timestamp with time zone default now()
 );
+
+-- Se a tabela miners já existia (projeto criado antes desta atualização),
+-- rode as duas linhas abaixo para adicionar as colunas novas sem perder dados:
+alter table miners add column if not exists unidade text not null default 'H/s';
+alter table miners add column if not exists poder_hs numeric not null default 0;
 
 -- =========================================================
 -- Row Level Security

@@ -264,8 +264,20 @@
             <input type="text" id="miner-nome" required placeholder="Ex: Quantum X7">
           </div>
           <div class="field">
-            <label>Poder (H/s)</label>
-            <input type="number" id="miner-poder" required step="any" min="0" placeholder="Ex: 1500">
+            <label>Poder</label>
+            <div style="display:flex; gap:8px;">
+              <input type="number" id="miner-poder" required step="any" min="0" placeholder="Ex: 1500" style="flex:2;">
+              <select id="miner-unidade" style="flex:1;">
+                <option value="H/s">H/s</option>
+                <option value="kH/s">kH/s</option>
+                <option value="MH/s">MH/s</option>
+                <option value="GH/s">GH/s</option>
+                <option value="TH/s" selected>TH/s</option>
+                <option value="PH/s">PH/s</option>
+                <option value="EH/s">EH/s</option>
+                <option value="ZH/s">ZH/s</option>
+              </select>
+            </div>
           </div>
           <div class="field">
             <label>Bônus (%)</label>
@@ -336,6 +348,35 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 let currentUser = null;
 let currentProfile = null;
 let myMiners = [];
+
+/* ---------------- Unidades de poder ---------------- */
+const UNIDADES_FATOR = {
+  'H/s': 1,
+  'kH/s': 1e3,
+  'MH/s': 1e6,
+  'GH/s': 1e9,
+  'TH/s': 1e12,
+  'PH/s': 1e15,
+  'EH/s': 1e18,
+  'ZH/s': 1e21
+};
+
+// Converte poder + unidade para H/s (menor unidade), base de todos os cálculos
+function paraHs(poder, unidade){
+  const fator = UNIDADES_FATOR[unidade] || 1;
+  return Number(poder) * fator;
+}
+
+// Formata um valor em H/s de volta para a unidade mais legível
+function formatarPoder(valorHs){
+  const unidades = Object.entries(UNIDADES_FATOR).sort((a,b) => b[1]-a[1]);
+  for (const [nome, fator] of unidades){
+    if (valorHs >= fator){
+      return (valorHs / fator).toLocaleString('pt-BR', {maximumFractionDigits:3}) + ' ' + nome;
+    }
+  }
+  return valorHs.toLocaleString('pt-BR', {maximumFractionDigits:3}) + ' H/s';
+}
 
 /* ---------------- Toast ---------------- */
 function showToast(msg){
@@ -463,6 +504,9 @@ function renderMiners(){
   }
   list.innerHTML = myMiners.map(m => {
     if (m.id === editingMinerId){
+      const opcoesUnidade = Object.keys(UNIDADES_FATOR).map(u =>
+        `<option value="${u}" ${u === (m.unidade || 'H/s') ? 'selected' : ''}>${u}</option>`
+      ).join('');
       return `
         <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
           <div class="field" style="margin-bottom:0;">
@@ -470,8 +514,11 @@ function renderMiners(){
             <input type="text" id="edit-nome-${m.id}" value="${escapeHtml(m.nome)}">
           </div>
           <div class="field" style="margin-bottom:0;">
-            <label>Poder (H/s)</label>
-            <input type="number" step="any" min="0" id="edit-poder-${m.id}" value="${m.poder}">
+            <label>Poder</label>
+            <div style="display:flex; gap:8px;">
+              <input type="number" step="any" min="0" id="edit-poder-${m.id}" value="${m.poder}" style="flex:2;">
+              <select id="edit-unidade-${m.id}" style="flex:1;">${opcoesUnidade}</select>
+            </div>
           </div>
           <div class="field" style="margin-bottom:0;">
             <label>Bônus (%)</label>
@@ -488,7 +535,7 @@ function renderMiners(){
     <div class="miner-row">
       <div class="miner-info">
         <div class="name">${escapeHtml(m.nome)}</div>
-        <div class="stats">Poder: ${m.poder} · Bônus: ${m.bonus}%</div>
+        <div class="stats">Poder: ${m.poder} ${m.unidade || 'H/s'} · Bônus: ${m.bonus}%</div>
       </div>
       <div class="miner-actions">
         <button class="icon-btn" onclick="startMinerEdit('${m.id}')" title="Editar">✎</button>
@@ -512,15 +559,17 @@ function cancelMinerEdit(){
 async function saveMinerEdit(id){
   const nome = document.getElementById(`edit-nome-${id}`).value.trim();
   const poder = parseFloat(document.getElementById(`edit-poder-${id}`).value);
+  const unidade = document.getElementById(`edit-unidade-${id}`).value;
   const bonus = parseFloat(document.getElementById(`edit-bonus-${id}`).value);
 
   if (!nome || isNaN(poder) || isNaN(bonus)){
     showToast('Preencha todos os campos corretamente.');
     return;
   }
+  const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').update({ nome, poder, bonus }).eq('id', id);
+    .from('miners').update({ nome, poder, unidade, poder_hs, bonus }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -535,10 +584,12 @@ async function handleAddMiner(e){
   e.preventDefault();
   const nome = document.getElementById('miner-nome').value.trim();
   const poder = parseFloat(document.getElementById('miner-poder').value);
+  const unidade = document.getElementById('miner-unidade').value;
   const bonus = parseFloat(document.getElementById('miner-bonus').value);
+  const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, nome, poder, bonus });
+    .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus });
 
   if (error){
     showToast('Erro ao adicionar miner.');
@@ -590,7 +641,7 @@ function calcularMelhorRack(){
     const temRepetido = new Set(nomes).size !== nomes.length;
     if (temRepetido) continue; // miners com mesmo nome não podem ocupar o mesmo rack
 
-    const poderTotal = combo.reduce((s, m) => s + Number(m.poder), 0);
+    const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs ?? paraHs(m.poder, m.unidade || 'H/s')), 0);
     const bonusTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
     const valorFinal = poderTotal * (1 + bonusTotal / 100);
 
@@ -614,14 +665,14 @@ function calcularMelhorRack(){
           <div class="slot">
             <div class="num">SLOT ${i + 1}</div>
             <div class="name">${escapeHtml(m.nome)}</div>
-            <div class="stat">Poder <b>${m.poder}</b></div>
+            <div class="stat">Poder <b>${m.poder} ${m.unidade || 'H/s'}</b></div>
             <div class="stat">Bônus <b>${m.bonus}%</b></div>
           </div>
         `).join('')}
       </div>
       <div class="result-summary">
         <div class="metric">
-          <div class="val">${melhor.poderTotal.toLocaleString('pt-BR')}</div>
+          <div class="val">${formatarPoder(melhor.poderTotal)}</div>
           <div class="lbl">Poder total</div>
         </div>
         <div class="metric">
@@ -629,7 +680,7 @@ function calcularMelhorRack(){
           <div class="lbl">Bônus total</div>
         </div>
         <div class="metric">
-          <div class="val">${melhor.valorFinal.toLocaleString('pt-BR', {maximumFractionDigits:1})}</div>
+          <div class="val">${formatarPoder(melhor.valorFinal)}</div>
           <div class="lbl">Valor final</div>
         </div>
       </div>
@@ -641,7 +692,7 @@ function calcularMelhorRack(){
       ${alternativas.map(a => `
         <div class="alt-item">
           <div class="names">${a.combo.map(m => m.nome).join(' + ')}</div>
-          <div class="score">${a.valorFinal.toLocaleString('pt-BR', {maximumFractionDigits:1})}</div>
+          <div class="score">${formatarPoder(a.valorFinal)}</div>
         </div>
       `).join('')}
     </div>` : ''}
