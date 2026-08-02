@@ -201,6 +201,18 @@
   .moeda-field{display:flex; gap:8px; align-items:center;}
   .moeda-field select{flex:1;}
 
+  .check-line{
+    display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text);
+    margin-bottom:8px; cursor:pointer;
+  }
+  .check-line:last-child{margin-bottom:0;}
+  .check-line input[type="checkbox"]{width:16px; height:16px; accent-color:var(--gold); cursor:pointer;}
+
+  .tag-off{
+    font-size:9px; color:var(--muted); border:1px solid var(--border); border-radius:100px;
+    padding:2px 7px; text-transform:uppercase; letter-spacing:0.04em;
+  }
+
   .cb-row{
     display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);
   }
@@ -339,6 +351,10 @@
               <span class="coin-badge" id="miner-moeda-badge"></span>
               <select id="miner-moeda" onchange="atualizarBadge('miner-moeda-badge', this.value)" style="flex:1.4;"></select>
             </div>
+          </div>
+          <div class="field">
+            <label class="check-line"><input type="checkbox" id="miner-usar-rack" checked> Considerar no cálculo do rack</label>
+            <label class="check-line"><input type="checkbox" id="miner-usar-cb" checked> Considerar no cálculo de custo-benefício</label>
           </div>
           <button type="submit" class="btn btn-primary">Adicionar miner</button>
         </form>
@@ -693,6 +709,10 @@ function renderMiners(){
               <select id="edit-moeda-${m.id}" onchange="atualizarBadge('edit-moeda-badge-${m.id}', this.value)" style="flex:1.4;">${opcoesMoedaEdit}</select>
             </div>
           </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="check-line"><input type="checkbox" id="edit-usar-rack-${m.id}" ${m.usar_rack !== false ? 'checked' : ''}> Considerar no cálculo do rack</label>
+            <label class="check-line"><input type="checkbox" id="edit-usar-cb-${m.id}" ${m.usar_cb !== false ? 'checked' : ''}> Considerar no cálculo de custo-benefício</label>
+          </div>
           <div style="display:flex; gap:8px; margin-top:4px;">
             <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveMinerEdit('${m.id}')">Salvar</button>
             <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="cancelMinerEdit()">Cancelar</button>
@@ -700,10 +720,14 @@ function renderMiners(){
         </div>
       `;
     }
+    const tagsOff = [
+      m.usar_rack === false ? '<span class="tag-off">Fora do rack</span>' : '',
+      m.usar_cb === false ? '<span class="tag-off">Fora do custo-benefício</span>' : ''
+    ].filter(Boolean).join(' ');
     return `
     <div class="miner-row">
       <div class="miner-info">
-        <div class="name">${escapeHtml(m.nome)}</div>
+        <div class="name">${escapeHtml(m.nome)} ${tagsOff}</div>
         <div class="stats">Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}%${m.valor ? ' · ' + fmtNum(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
       </div>
       <div class="miner-actions">
@@ -737,6 +761,8 @@ async function saveMinerEdit(id){
   const bonus = parseFloat(document.getElementById(`edit-bonus-${id}`).value);
   const valor = parseFloat(document.getElementById(`edit-valor-${id}`).value);
   const moeda = document.getElementById(`edit-moeda-${id}`).value;
+  const usar_rack = document.getElementById(`edit-usar-rack-${id}`).checked;
+  const usar_cb = document.getElementById(`edit-usar-cb-${id}`).checked;
 
   if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(valor)){
     showToast('Preencha todos os campos corretamente.');
@@ -745,7 +771,7 @@ async function saveMinerEdit(id){
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').update({ nome, poder, unidade, poder_hs, bonus, valor, moeda }).eq('id', id);
+    .from('miners').update({ nome, poder, unidade, poder_hs, bonus, valor, moeda, usar_rack, usar_cb }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -764,10 +790,12 @@ async function handleAddMiner(e){
   const bonus = parseFloat(document.getElementById('miner-bonus').value);
   const valor = parseFloat(document.getElementById('miner-valor').value);
   const moeda = document.getElementById('miner-moeda').value;
+  const usar_rack = document.getElementById('miner-usar-rack').checked;
+  const usar_cb = document.getElementById('miner-usar-cb').checked;
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus, valor, moeda });
+    .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus, valor, moeda, usar_rack, usar_cb });
 
   if (error){
     showToast('Erro ao adicionar miner.');
@@ -807,12 +835,14 @@ function combinacoes(arr, k){
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
-  if (myMiners.length < 4){
-    box.innerHTML = `<div class="card"><div class="empty-state">Cadastre pelo menos 4 miners para calcular o rack.</div></div>`;
+  const elegiveis = myMiners.filter(m => m.usar_rack !== false);
+
+  if (elegiveis.length < 4){
+    box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "considerar no rack") pelo menos 4 miners para calcular.</div></div>`;
     return;
   }
 
-  const combos = combinacoes(myMiners, 4);
+  const combos = combinacoes(elegiveis, 4);
   const validos = [];
 
   for (const combo of combos){
@@ -883,9 +913,9 @@ function calcularMelhorRack(){
 function calcularCustoBeneficio(){
   const box = document.getElementById('resultado-custobeneficio');
 
-  const comValor = myMiners.filter(m => m.valor && m.valor > 0);
+  const comValor = myMiners.filter(m => m.valor && m.valor > 0 && m.usar_cb !== false);
   if (!comValor.length){
-    box.innerHTML = `<div class="card"><div class="empty-state">Nenhum miner com valor pago cadastrado ainda. Edite seus miners e preencha o campo "Valor pago".</div></div>`;
+    box.innerHTML = `<div class="card"><div class="empty-state">Nenhum miner elegível com valor pago cadastrado. Confira o campo "Valor pago" e a opção "Considerar no cálculo de custo-benefício".</div></div>`;
     return;
   }
 
