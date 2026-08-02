@@ -67,7 +67,7 @@
   }
   .role-pill.creator{color:var(--gold); border-color:var(--gold-dim); background:rgba(232,185,62,0.08);}
 
-  main{flex:1; padding:20px; padding-bottom:96px; max-width:640px; width:100%; margin:0 auto;}
+  main{flex:1; padding:20px; padding-bottom:32px; max-width:640px; width:100%; margin:0 auto;}
   .screen{display:none; animation:fade .25s ease;}
   .screen.active{display:block;}
   @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
@@ -169,26 +169,56 @@
   .alt-item .names{color:var(--muted); font-family:'JetBrains Mono'; font-size:11px;}
   .alt-item .score{font-family:'JetBrains Mono'; color:var(--teal); font-weight:600;}
 
-  /* ---------- Bottom nav ---------- */
-  .bottom-nav{
-    position:fixed; bottom:0; left:0; right:0; z-index:20;
-    display:flex; border-top:1px solid var(--border);
-    background:rgba(11,14,20,0.92); backdrop-filter:blur(10px);
-    padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+  /* ---------- Top tabs ---------- */
+  .top-tabs{
+    display:flex; gap:4px; overflow-x:auto; -ms-overflow-style:none; scrollbar-width:none;
+    padding:0 16px; border-bottom:1px solid var(--border);
+    background:rgba(20,25,36,0.5); position:sticky; top:63px; z-index:9;
   }
-  .nav-btn{
-    flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
-    background:none; border:none; color:var(--muted); font-size:10px; padding:6px; border-radius:10px;
+  .top-tabs::-webkit-scrollbar{display:none;}
+  .tab-btn{
+    flex-shrink:0; display:flex; align-items:center; gap:6px;
+    background:none; border:none; border-bottom:2px solid transparent;
+    color:var(--muted); font-size:13px; font-weight:600; padding:12px 14px;
+    white-space:nowrap; transition:color .15s, border-color .15s;
   }
-  .nav-btn .ic{font-size:18px;}
-  .nav-btn.active{color:var(--gold);}
+  .tab-btn .ic{font-size:15px;}
+  .tab-btn.active{color:var(--gold); border-bottom-color:var(--gold);}
 
   .toast{
-    position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
     background:var(--surface-2); border:1px solid var(--border); color:var(--text);
     padding:10px 16px; border-radius:10px; font-size:13px; z-index:50;
     display:none; box-shadow:0 8px 24px rgba(0,0,0,0.4);
   }
+
+  /* ---------- Moeda badge / seletor ---------- */
+  .coin-badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:26px; height:26px; border-radius:50%; font-size:9px; font-weight:700;
+    font-family:'JetBrains Mono'; color:#0B0E14; flex-shrink:0;
+  }
+  .moeda-field{display:flex; gap:8px; align-items:center;}
+  .moeda-field select{flex:1;}
+
+  .cb-row{
+    display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);
+  }
+  .cb-row:last-child{border-bottom:none;}
+  .cb-rank{
+    width:22px; text-align:center; font-family:'JetBrains Mono'; font-size:12px; color:var(--muted); flex-shrink:0;
+  }
+  .cb-info{flex:1; min-width:0;}
+  .cb-info .name{font-weight:600; font-size:14px;}
+  .cb-info .stats{font-size:11px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:2px;}
+  .cb-score{text-align:right; flex-shrink:0;}
+  .cb-score .val{font-family:'JetBrains Mono'; font-weight:700; color:var(--teal); font-size:13px;}
+  .cb-score .lbl{font-size:9px; color:var(--muted); text-transform:uppercase;}
+  .cb-group-title{
+    font-size:11px; color:var(--gold); text-transform:uppercase; letter-spacing:0.06em;
+    margin:16px 0 6px; padding-bottom:6px; border-bottom:1px solid var(--border);
+  }
+  .cb-group-title:first-child{margin-top:0;}
 </style>
 </head>
 <body>
@@ -253,6 +283,21 @@
     </div>
   </div>
 
+  <nav class="top-tabs">
+    <button class="tab-btn active" data-screen="miners" onclick="switchScreen('miners')">
+      <span class="ic">⛏</span>Miners
+    </button>
+    <button class="tab-btn" data-screen="calculo" onclick="switchScreen('calculo')">
+      <span class="ic">▦</span>Cálculo
+    </button>
+    <button class="tab-btn" data-screen="custobeneficio" onclick="switchScreen('custobeneficio')">
+      <span class="ic">$</span>Custo-Benefício
+    </button>
+    <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
+      <span class="ic">◎</span>Perfil
+    </button>
+  </nav>
+
   <main>
     <!-- MINERS -->
     <section id="screen-miners" class="screen active">
@@ -283,6 +328,14 @@
             <label>Bônus (%)</label>
             <input type="number" id="miner-bonus" required step="any" min="0" placeholder="Ex: 12.5">
           </div>
+          <div class="field">
+            <label>Valor pago</label>
+            <div class="moeda-field">
+              <input type="number" id="miner-valor" required step="any" min="0" placeholder="Ex: 250" style="flex:1;">
+              <span class="coin-badge" id="miner-moeda-badge"></span>
+              <select id="miner-moeda" onchange="atualizarBadge('miner-moeda-badge', this.value)" style="flex:1.4;"></select>
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary">Adicionar miner</button>
         </form>
       </div>
@@ -308,6 +361,21 @@
       <div id="resultado-calculo"></div>
     </section>
 
+    <!-- CUSTO-BENEFÍCIO -->
+    <section id="screen-custobeneficio" class="screen">
+      <div class="card">
+        <div class="section-title">Ranking de custo-benefício</div>
+        <p style="font-size:13px; color:var(--muted); line-height:1.5;">
+          Classifica seus miners pelo melhor custo-benefício: poder (já com o bônus aplicado)
+          dividido pelo valor pago. Quanto maior o número, mais poder você ganha por unidade da moeda gasta.
+          A comparação é feita separadamente por moeda, já que valores em moedas diferentes não podem ser somados.
+        </p>
+        <button class="btn btn-primary" style="margin-top:14px;" onclick="calcularCustoBeneficio()">Calcular ranking</button>
+      </div>
+
+      <div id="resultado-custobeneficio"></div>
+    </section>
+
     <!-- PERFIL -->
     <section id="screen-perfil" class="screen">
       <div class="card">
@@ -319,18 +387,6 @@
       <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
     </section>
   </main>
-
-  <nav class="bottom-nav">
-    <button class="nav-btn active" data-screen="miners" onclick="switchScreen('miners')">
-      <span class="ic">⛏</span>Miners
-    </button>
-    <button class="nav-btn" data-screen="calculo" onclick="switchScreen('calculo')">
-      <span class="ic">▦</span>Cálculo
-    </button>
-    <button class="nav-btn" data-screen="perfil" onclick="switchScreen('perfil')">
-      <span class="ic">◎</span>Perfil
-    </button>
-  </nav>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -398,6 +454,37 @@ function unidadeReferencia(combo){
   });
   return Object.entries(contagem)
     .sort((a, b) => b[1] - a[1] || UNIDADES_FATOR[b[0]] - UNIDADES_FATOR[a[0]])[0][0];
+}
+
+/* ---------------- Moedas ---------------- */
+const MOEDAS = ['RST','RLT','BTC','ETH','HMT','FREON','TWT','XRP','ALGO','TRX','DODGE','BNB','BUSD','TON','POL','SOL','USDT','WFLOKI','ECOIN','WPEPE','WSHIB','LTC'];
+
+// Gera uma cor determinística (HSL) a partir do código da moeda, para o badge
+function corMoeda(codigo){
+  let hash = 0;
+  for (let i = 0; i < codigo.length; i++) hash = codigo.charCodeAt(i) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 68%, 58%)`;
+}
+
+function opcoesMoeda(selecionada){
+  return MOEDAS.map(c => `<option value="${c}" ${c === selecionada ? 'selected' : ''}>${c}</option>`).join('');
+}
+
+function atualizarBadge(elId, codigo){
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.style.background = corMoeda(codigo);
+  el.textContent = codigo.slice(0, 3);
+}
+
+function popularSelectsMoeda(){
+  const selCadastro = document.getElementById('miner-moeda');
+  if (selCadastro && !selCadastro.dataset.filled){
+    selCadastro.innerHTML = opcoesMoeda('RST');
+    selCadastro.dataset.filled = '1';
+    atualizarBadge('miner-moeda-badge', 'RST');
+  }
 }
 
 /* ---------------- Toast ---------------- */
@@ -498,6 +585,7 @@ async function onAuthReady(user){
   document.getElementById('perfil-email').textContent = user.email;
   document.getElementById('perfil-tipo').textContent = isCreator ? 'Criador (C)' : 'Usuário (U)';
 
+  popularSelectsMoeda();
   await loadMiners();
 }
 
@@ -505,7 +593,7 @@ async function onAuthReady(user){
 function switchScreen(name){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
 }
 
 /* ---------------- Miners CRUD ---------------- */
@@ -529,6 +617,7 @@ function renderMiners(){
       const opcoesUnidade = Object.keys(UNIDADES_FATOR).map(u =>
         `<option value="${u}" ${u === (m.unidade || 'H/s') ? 'selected' : ''}>${u}</option>`
       ).join('');
+      const opcoesMoedaEdit = opcoesMoeda(m.moeda || 'RST');
       return `
         <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
           <div class="field" style="margin-bottom:0;">
@@ -546,6 +635,14 @@ function renderMiners(){
             <label>Bônus (%)</label>
             <input type="number" step="any" min="0" id="edit-bonus-${m.id}" value="${m.bonus}">
           </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Valor pago</label>
+            <div class="moeda-field">
+              <input type="number" step="any" min="0" id="edit-valor-${m.id}" value="${m.valor ?? ''}" style="flex:1;">
+              <span class="coin-badge" id="edit-moeda-badge-${m.id}"></span>
+              <select id="edit-moeda-${m.id}" onchange="atualizarBadge('edit-moeda-badge-${m.id}', this.value)" style="flex:1.4;">${opcoesMoedaEdit}</select>
+            </div>
+          </div>
           <div style="display:flex; gap:8px; margin-top:4px;">
             <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveMinerEdit('${m.id}')">Salvar</button>
             <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="cancelMinerEdit()">Cancelar</button>
@@ -557,7 +654,7 @@ function renderMiners(){
     <div class="miner-row">
       <div class="miner-info">
         <div class="name">${escapeHtml(m.nome)}</div>
-        <div class="stats">Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}%</div>
+        <div class="stats">Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}%${m.valor ? ' · ' + fmtNum(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
       </div>
       <div class="miner-actions">
         <button class="icon-btn" onclick="startMinerEdit('${m.id}')" title="Editar">✎</button>
@@ -566,6 +663,11 @@ function renderMiners(){
     </div>
   `;
   }).join('');
+  // atualiza os badges de moeda dos itens em edição, se houver
+  if (editingMinerId){
+    const m = myMiners.find(x => x.id === editingMinerId);
+    if (m) atualizarBadge(`edit-moeda-badge-${m.id}`, m.moeda || 'RST');
+  }
 }
 
 function startMinerEdit(id){
@@ -583,15 +685,17 @@ async function saveMinerEdit(id){
   const poder = parseFloat(document.getElementById(`edit-poder-${id}`).value);
   const unidade = document.getElementById(`edit-unidade-${id}`).value;
   const bonus = parseFloat(document.getElementById(`edit-bonus-${id}`).value);
+  const valor = parseFloat(document.getElementById(`edit-valor-${id}`).value);
+  const moeda = document.getElementById(`edit-moeda-${id}`).value;
 
-  if (!nome || isNaN(poder) || isNaN(bonus)){
+  if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(valor)){
     showToast('Preencha todos os campos corretamente.');
     return;
   }
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').update({ nome, poder, unidade, poder_hs, bonus }).eq('id', id);
+    .from('miners').update({ nome, poder, unidade, poder_hs, bonus, valor, moeda }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -608,10 +712,12 @@ async function handleAddMiner(e){
   const poder = parseFloat(document.getElementById('miner-poder').value);
   const unidade = document.getElementById('miner-unidade').value;
   const bonus = parseFloat(document.getElementById('miner-bonus').value);
+  const valor = parseFloat(document.getElementById('miner-valor').value);
+  const moeda = document.getElementById('miner-moeda').value;
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus });
+    .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus, valor, moeda });
 
   if (error){
     showToast('Erro ao adicionar miner.');
@@ -620,6 +726,7 @@ async function handleAddMiner(e){
   document.getElementById('miner-nome').value = '';
   document.getElementById('miner-poder').value = '';
   document.getElementById('miner-bonus').value = '';
+  document.getElementById('miner-valor').value = '';
   showToast('Miner adicionado.');
   await loadMiners();
   return false;
@@ -720,6 +827,60 @@ function calcularMelhorRack(){
       `).join('')}
     </div>` : ''}
   `;
+}
+
+/* ---------------- Custo-benefício ---------------- */
+function calcularCustoBeneficio(){
+  const box = document.getElementById('resultado-custobeneficio');
+
+  const comValor = myMiners.filter(m => m.valor && m.valor > 0);
+  if (!comValor.length){
+    box.innerHTML = `<div class="card"><div class="empty-state">Nenhum miner com valor pago cadastrado ainda. Edite seus miners e preencha o campo "Valor pago".</div></div>`;
+    return;
+  }
+
+  // calcula o score de cada miner: poder (com bônus aplicado) por unidade de moeda gasta
+  const itens = comValor.map(m => {
+    const poderHs = m.poder_hs || paraHs(m.poder, m.unidade || 'H/s');
+    const poderComBonus = poderHs * (1 + Number(m.bonus) / 100);
+    const score = poderComBonus / Number(m.valor);
+    return { ...m, poderHs, poderComBonus, score };
+  });
+
+  // agrupa por moeda, já que valores em moedas diferentes não são comparáveis diretamente
+  const porMoeda = {};
+  itens.forEach(m => {
+    const moeda = m.moeda || 'RST';
+    if (!porMoeda[moeda]) porMoeda[moeda] = [];
+    porMoeda[moeda].push(m);
+  });
+
+  const moedasOrdenadas = Object.keys(porMoeda).sort();
+
+  box.innerHTML = moedasOrdenadas.map(moeda => {
+    const lista = porMoeda[moeda].sort((a, b) => b.score - a.score);
+    return `
+      <div class="card">
+        <div class="cb-group-title">
+          <span class="coin-badge" style="background:${corMoeda(moeda)};">${moeda.slice(0,3)}</span>
+          &nbsp; Pago em ${moeda}
+        </div>
+        ${lista.map((m, i) => `
+          <div class="cb-row">
+            <div class="cb-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)}</div>
+            <div class="cb-info">
+              <div class="name">${escapeHtml(m.nome)}</div>
+              <div class="stats">${formatarPoderEm(m.poderHs, m.unidade || 'H/s')} · Bônus ${fmtNum(m.bonus)}% · ${fmtNum(m.valor)} ${moeda}</div>
+            </div>
+            <div class="cb-score">
+              <div class="val">${m.score.toLocaleString('pt-BR', {maximumFractionDigits:3})}</div>
+              <div class="lbl">poder/${moeda}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }).join('');
 }
 
 /* ---------------- Utils ---------------- */
