@@ -256,6 +256,10 @@
         <input type="text" id="signup-name" required placeholder="Seu nome">
       </div>
       <div class="field">
+        <label>CPF</label>
+        <input type="text" id="signup-cpf" required placeholder="000.000.000-00" maxlength="14" inputmode="numeric" oninput="mascaraCpf(this)">
+      </div>
+      <div class="field">
         <label>E-mail</label>
         <input type="email" id="signup-email" required placeholder="voce@email.com">
       </div>
@@ -381,6 +385,7 @@
       <div class="card">
         <div class="section-title">Perfil</div>
         <div class="field"><label>Nome</label><div id="perfil-nome" style="font-size:14px;">—</div></div>
+        <div class="field"><label>CPF</label><div id="perfil-cpf" style="font-size:14px;">—</div></div>
         <div class="field"><label>E-mail</label><div id="perfil-email" style="font-size:14px;">—</div></div>
         <div class="field"><label>Tipo de conta</label><div id="perfil-tipo" style="font-size:14px;">—</div></div>
       </div>
@@ -497,6 +502,42 @@ function showToast(msg){
 }
 
 /* ---------------- Auth tabs ---------------- */
+/* ---------------- CPF ---------------- */
+function mascaraCpf(input){
+  let v = input.value.replace(/\D/g, '').slice(0, 11);
+  v = v.replace(/(\d{3})(\d)/, '$1.$2');
+  v = v.replace(/(\d{3})(\d)/, '$1.$2');
+  v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  input.value = v;
+}
+
+function formatarCpf(cpf){
+  if (!cpf) return '';
+  const v = String(cpf).replace(/\D/g, '');
+  if (v.length !== 11) return cpf;
+  return v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+
+// Validação oficial do algoritmo de dígitos verificadores do CPF
+function validarCpf(cpf){
+  cpf = String(cpf).replace(/\D/g, '');
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 9; i++) soma += parseInt(cpf[i]) * (10 - i);
+  let resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  if (resto !== parseInt(cpf[9])) return false;
+
+  soma = 0;
+  for (let i = 0; i < 10; i++) soma += parseInt(cpf[i]) * (11 - i);
+  resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  if (resto !== parseInt(cpf[10])) return false;
+
+  return true;
+}
+
 function switchAuthTab(tab){
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-signup').classList.toggle('active', tab==='signup');
@@ -526,14 +567,22 @@ async function handleLogin(e){
 async function handleSignup(e){
   e.preventDefault();
   const nome = document.getElementById('signup-name').value.trim();
+  const cpfFormatado = document.getElementById('signup-cpf').value.trim();
+  const cpf = cpfFormatado.replace(/\D/g, '');
   const email = document.getElementById('signup-email').value.trim();
   const password = document.getElementById('signup-password').value;
   const errEl = document.getElementById('signup-error');
   errEl.style.display = 'none';
 
+  if (!validarCpf(cpf)){
+    errEl.textContent = 'CPF inválido. Confira os números digitados.';
+    errEl.style.display = 'block';
+    return false;
+  }
+
   const { data, error } = await supabaseClient.auth.signUp({
     email, password,
-    options: { data: { nome } }
+    options: { data: { nome, cpf } }
   });
   if (error){
     errEl.textContent = error.message.includes('already') ? 'Este e-mail já está cadastrado.' : ('Erro: ' + error.message);
@@ -567,7 +616,7 @@ async function onAuthReady(user){
   if (!profile){
     const { data: created } = await supabaseClient
       .from('profiles')
-      .insert({ id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email, tipo: 'U' })
+      .insert({ id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email, cpf: user.user_metadata?.cpf || null, tipo: 'U' })
       .select().maybeSingle();
     profile = created;
   }
@@ -583,6 +632,7 @@ async function onAuthReady(user){
 
   document.getElementById('perfil-nome').textContent = profile?.nome || '—';
   document.getElementById('perfil-email').textContent = user.email;
+  document.getElementById('perfil-cpf').textContent = formatarCpf(profile?.cpf) || '—';
   document.getElementById('perfil-tipo').textContent = isCreator ? 'Criador (C)' : 'Usuário (U)';
 
   popularSelectsMoeda();
