@@ -45,11 +45,13 @@
   /* ---------- App shell ---------- */
   #app{display:none; flex-direction:column; min-height:100vh;}
   #app.active{display:flex;}
+  .app-header{
+    position:sticky; top:0; z-index:20; flex-shrink:0;
+    background:rgba(11,14,20,0.96); backdrop-filter:blur(8px);
+  }
   .topbar{
     display:flex; align-items:center; justify-content:space-between;
     padding:16px 20px; border-bottom:1px solid var(--border);
-    background:linear-gradient(180deg, rgba(20,25,36,0.9), rgba(20,25,36,0.4));
-    position:sticky; top:0; z-index:10; backdrop-filter:blur(8px);
   }
   .brand{display:flex; align-items:center; gap:10px;}
   .coin{
@@ -173,7 +175,6 @@
   .top-tabs{
     display:flex; gap:4px; overflow-x:auto; -ms-overflow-style:none; scrollbar-width:none;
     padding:0 16px; border-bottom:1px solid var(--border);
-    background:rgba(20,25,36,0.5); position:sticky; top:63px; z-index:9;
   }
   .top-tabs::-webkit-scrollbar{display:none;}
   .tab-btn{
@@ -288,31 +289,33 @@
 
 <!-- ================= APP ================= -->
 <div id="app">
-  <div class="topbar">
-    <div class="brand">
-      <div class="coin">LC</div>
-      <div class="brand-name">LaliCoin</div>
+  <div class="app-header">
+    <div class="topbar">
+      <div class="brand">
+        <div class="coin">LC</div>
+        <div class="brand-name">LaliCoin</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="role-pill" id="role-pill">U</span>
+        <button class="icon-btn" onclick="handleLogout()" title="Sair">⏻</button>
+      </div>
     </div>
-    <div style="display:flex; align-items:center; gap:10px;">
-      <span class="role-pill" id="role-pill">U</span>
-      <button class="icon-btn" onclick="handleLogout()" title="Sair">⏻</button>
-    </div>
-  </div>
 
-  <nav class="top-tabs">
-    <button class="tab-btn active" data-screen="miners" onclick="switchScreen('miners')">
-      <span class="ic">⛏</span>Miners
-    </button>
-    <button class="tab-btn" data-screen="calculo" onclick="switchScreen('calculo')">
-      <span class="ic">▦</span>Cálculo
-    </button>
-    <button class="tab-btn" data-screen="custobeneficio" onclick="switchScreen('custobeneficio')">
-      <span class="ic">$</span>Custo-Benefício
-    </button>
-    <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
-      <span class="ic">◎</span>Perfil
-    </button>
-  </nav>
+    <nav class="top-tabs">
+      <button class="tab-btn active" data-screen="miners" onclick="switchScreen('miners')">
+        <span class="ic">⛏</span>Miners
+      </button>
+      <button class="tab-btn" data-screen="calculo" onclick="switchScreen('calculo')">
+        <span class="ic">▦</span>Cálculo
+      </button>
+      <button class="tab-btn" data-screen="custobeneficio" onclick="switchScreen('custobeneficio')">
+        <span class="ic">$</span>Custo-Benefício
+      </button>
+      <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
+        <span class="ic">◎</span>Perfil
+      </button>
+    </nav>
+  </div>
 
   <main>
     <!-- MINERS -->
