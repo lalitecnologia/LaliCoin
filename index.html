@@ -956,8 +956,8 @@ function calcularCustoBeneficio(){
               <div class="stats">${formatarPoderEm(m.poderHs, m.unidade || 'H/s')} · Bônus ${fmtNum(m.bonus)}% · ${fmtNum(m.valor)} ${moeda}</div>
             </div>
             <div class="cb-score">
-              <div class="val">${m.score.toLocaleString('pt-BR', {maximumFractionDigits:3})}</div>
-              <div class="lbl">poder/${moeda}</div>
+              <div class="val">${formatarPoder(m.score)}</div>
+              <div class="lbl">por ${moeda}</div>
             </div>
           </div>
         `).join('')}
