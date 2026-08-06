@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --bg:#0B0E14;
@@ -377,6 +378,16 @@
     <section id="screen-rack" class="screen">
       <div class="card">
         <div class="section-title">Cadastrar rack</div>
+
+        <button type="button" class="btn btn-ghost" id="btn-ler-imagem-rack" onclick="document.getElementById('rack-imagem-input').click()">
+          📷 Ler imagem do rack
+        </button>
+        <input type="file" id="rack-imagem-input" accept="image/*" style="display:none;" onchange="lerImagemRack(event)">
+        <p class="hint" style="margin-top:8px; margin-bottom:16px;">
+          Tira uma foto ou seleciona um print da tela do rack no RollerCoin — o app tenta preencher
+          os campos abaixo automaticamente. Sempre revise antes de salvar, a leitura pode errar.
+        </p>
+
         <form onsubmit="return handleAddRack(event)">
           <div class="field">
             <label>Nome do rack</label>
@@ -971,6 +982,76 @@ async function saveRackEdit(id){
   editingRackId = null;
   showToast('Rack atualizado.');
   await loadRacks();
+}
+
+/* ---------------- Leitura de imagem (OCR) para cadastro de rack ---------------- */
+async function lerImagemRack(event){
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const btn = document.getElementById('btn-ler-imagem-rack');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Lendo imagem...';
+
+  try {
+    const { data } = await Tesseract.recognize(file, 'por+eng');
+    const texto = data.text || '';
+    preencherFormularioRackComOcr(texto);
+    showToast('Dados extraídos — revise antes de salvar.');
+  } catch (err){
+    showToast('Não foi possível ler a imagem. Preencha manualmente.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+    event.target.value = '';
+  }
+}
+
+function preencherFormularioRackComOcr(texto){
+  const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Bônus: procura um número seguido de %
+  const matchBonus = texto.match(/(\d+[.,]?\d*)\s*%/);
+  if (matchBonus){
+    document.getElementById('rack-bonus').value = matchBonus[1].replace(',', '.');
+  }
+
+  // Valor + moeda: procura um número perto de um dos códigos de moeda conhecidos
+  let valorEncontrado = null;
+  let moedaEncontrada = null;
+  for (const codigo of MOEDAS){
+    const regex = new RegExp('([\\d.,]+)\\s*' + codigo + '|' + codigo + '\\s*([\\d.,]+)', 'i');
+    const m = texto.match(regex);
+    if (m){
+      const bruto = (m[1] || m[2] || '').replace(/\.(?=\d{3})/g, '').replace(',', '.');
+      const num = parseFloat(bruto);
+      if (!isNaN(num)){
+        valorEncontrado = num;
+        moedaEncontrada = codigo;
+        break;
+      }
+    }
+  }
+  if (valorEncontrado !== null){
+    document.getElementById('rack-valor').value = valorEncontrado;
+  }
+  if (moedaEncontrada){
+    document.getElementById('rack-moeda').value = moedaEncontrada;
+    atualizarBadge('rack-moeda-badge', moedaEncontrada);
+  }
+
+  // Nome: primeira linha "de texto" que não seja só número, %, ou moeda
+  const linhaNome = linhas.find(l => {
+    const semEspaco = l.replace(/\s/g, '');
+    if (semEspaco.length < 3) return false;
+    if (/^[\d.,%]+$/.test(semEspaco)) return false;
+    if (MOEDAS.some(c => new RegExp('^' + c + '$', 'i').test(semEspaco))) return false;
+    return true;
+  });
+  if (linhaNome){
+    document.getElementById('rack-nome').value = linhaNome;
+  }
 }
 
 async function handleAddRack(e){
