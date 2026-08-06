@@ -401,6 +401,10 @@
             <input type="number" id="rack-bonus" required step="any" min="0" placeholder="Ex: 8">
           </div>
           <div class="field">
+            <label>Número de slots</label>
+            <input type="number" id="rack-slots" required step="1" min="1" value="4" placeholder="Ex: 4">
+          </div>
+          <div class="field">
             <label>Valor pago</label>
             <div class="moeda-field">
               <input type="number" id="rack-valor" required step="any" min="0" placeholder="Ex: 5000" style="flex:1;">
@@ -484,11 +488,13 @@
       <div class="card">
         <div class="section-title">Melhor combinação por rack</div>
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
-          Distribui seus miners ativos entre os racks ativos, 4 por rack. Racks com maior bônus têm
-          prioridade e escolhem primeiro os melhores miners disponíveis; um miner só pode ocupar um
-          rack por vez, e miners com o mesmo nome não podem estar juntos no mesmo rack. Para cada
-          rack, o cálculo soma o poder dos 4 miners e aplica sobre esse total o bônus dos miners somado
-          ao bônus do próprio rack.
+          Distribui seus miners ativos entre os racks ativos, respeitando a quantidade de slots de
+          cada rack. Racks com maior bônus têm prioridade e escolhem primeiro os melhores miners
+          disponíveis; um miner só pode ocupar um rack por vez, e miners com o mesmo nome não podem
+          estar juntos no mesmo rack. Para cada rack, o cálculo soma o poder dos miners escolhidos e
+          aplica sobre esse total o bônus dos miners somado ao bônus do próprio rack. Quando há muitos
+          miners e slots, o app pode usar uma estimativa (marcada como "Estimativa") em vez de testar
+          todas as combinações possíveis, para não travar o navegador.
         </p>
         <button class="btn btn-primary" style="margin-top:14px;" onclick="calcularMelhorRack()">Calcular distribuição</button>
       </div>
@@ -982,6 +988,10 @@ function renderRacks(){
             <input type="number" step="any" min="0" id="edit-rack-bonus-${r.id}" value="${r.bonus}">
           </div>
           <div class="field" style="margin-bottom:0;">
+            <label>Número de slots</label>
+            <input type="number" step="1" min="1" id="edit-rack-slots-${r.id}" value="${r.slots ?? 4}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
             <label>Valor pago</label>
             <div class="moeda-field">
               <input type="number" step="any" min="0" id="edit-rack-valor-${r.id}" value="${r.valor ?? ''}" style="flex:1;">
@@ -1004,7 +1014,7 @@ function renderRacks(){
     <div class="miner-row">
       <div class="miner-info">
         <div class="name">${escapeHtml(r.nome)} ${tagOff}</div>
-        <div class="stats">Bônus: ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') : ''}</div>
+        <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') : ''}</div>
       </div>
       <div class="miner-actions">
         <button class="icon-btn" onclick="startRackEdit('${r.id}')" title="Editar">✎</button>
@@ -1032,17 +1042,18 @@ function cancelRackEdit(){
 async function saveRackEdit(id){
   const nome = document.getElementById(`edit-rack-nome-${id}`).value.trim();
   const bonus = parseFloat(document.getElementById(`edit-rack-bonus-${id}`).value);
+  const slots = parseInt(document.getElementById(`edit-rack-slots-${id}`).value, 10);
   const valor = parseFloat(document.getElementById(`edit-rack-valor-${id}`).value);
   const moeda = document.getElementById(`edit-rack-moeda-${id}`).value;
   const ativo = document.getElementById(`edit-rack-ativo-${id}`).checked;
 
-  if (!nome || isNaN(bonus) || isNaN(valor)){
+  if (!nome || isNaN(bonus) || isNaN(slots) || slots < 1 || isNaN(valor)){
     showToast('Preencha todos os campos corretamente.');
     return;
   }
 
   const { error } = await supabaseClient
-    .from('racks').update({ nome, bonus, valor, moeda, ativo }).eq('id', id);
+    .from('racks').update({ nome, bonus, slots, valor, moeda, ativo }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -1086,6 +1097,12 @@ function preencherFormularioRackComOcr(texto){
     document.getElementById('rack-bonus').value = matchBonus[1].replace(',', '.');
   }
 
+  // Slots: procura um número seguido de "slots", "espaços" ou "vagas"
+  const matchSlots = texto.match(/(\d+)\s*(slots?|espaços?|vagas?)/i);
+  if (matchSlots){
+    document.getElementById('rack-slots').value = matchSlots[1];
+  }
+
   // Valor + moeda: procura um número perto de um dos códigos de moeda conhecidos
   let valorEncontrado = null;
   let moedaEncontrada = null;
@@ -1116,6 +1133,7 @@ function preencherFormularioRackComOcr(texto){
     if (semEspaco.length < 3) return false;
     if (/^[\d.,%]+$/.test(semEspaco)) return false;
     if (MOEDAS.some(c => new RegExp('^' + c + '$', 'i').test(semEspaco))) return false;
+    if (/slots?|espaços?|vagas?/i.test(l)) return false;
     return true;
   });
   if (linhaNome){
@@ -1127,12 +1145,13 @@ async function handleAddRack(e){
   e.preventDefault();
   const nome = document.getElementById('rack-nome').value.trim();
   const bonus = parseFloat(document.getElementById('rack-bonus').value);
+  const slots = parseInt(document.getElementById('rack-slots').value, 10);
   const valor = parseFloat(document.getElementById('rack-valor').value);
   const moeda = document.getElementById('rack-moeda').value;
   const ativo = document.getElementById('rack-ativo').checked;
 
   const { error } = await supabaseClient
-    .from('racks').insert({ user_id: currentUser.id, nome, bonus, valor, moeda, ativo });
+    .from('racks').insert({ user_id: currentUser.id, nome, bonus, slots, valor, moeda, ativo });
 
   if (error){
     showToast('Erro ao adicionar rack.');
@@ -1140,6 +1159,7 @@ async function handleAddRack(e){
   }
   document.getElementById('rack-nome').value = '';
   document.getElementById('rack-bonus').value = '';
+  document.getElementById('rack-slots').value = '4';
   document.getElementById('rack-valor').value = '';
   showToast('Rack adicionado.');
   await loadRacks();
@@ -1331,6 +1351,43 @@ function combinacoes(arr, k){
   return resultado;
 }
 
+// Estima o número de combinações C(n,k) para decidir se dá pra calcular com exatidão
+function nCk(n, k){
+  if (k > n) return 0;
+  let resultado = 1;
+  for (let i = 0; i < k; i++) resultado = resultado * (n - i) / (i + 1);
+  return resultado;
+}
+
+// Escolhe os melhores k miners (sem repetir nome) por um método guloso — usado quando
+// o número de combinações possíveis é grande demais para testar todas com exatidão
+function escolherMelhoresGuloso(miners, k, bonusRack){
+  const ordenados = [...miners].sort((a, b) => {
+    const scoreA = Number(a.poder_hs || paraHs(a.poder, a.unidade || 'H/s')) * (1 + Number(a.bonus) / 100);
+    const scoreB = Number(b.poder_hs || paraHs(b.poder, b.unidade || 'H/s')) * (1 + Number(b.bonus) / 100);
+    return scoreB - scoreA;
+  });
+  const escolhidos = [];
+  const nomesUsados = new Set();
+  for (const m of ordenados){
+    if (escolhidos.length >= k) break;
+    if (nomesUsados.has(m.nome)) continue;
+    escolhidos.push(m);
+    nomesUsados.add(m.nome);
+  }
+  if (escolhidos.length < k) return null;
+
+  const poderTotal = escolhidos.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
+  const bonusMinersTotal = escolhidos.reduce((s, m) => s + Number(m.bonus), 0);
+  const bonusTotal = bonusMinersTotal + Number(bonusRack);
+  const valorFinal = poderTotal * (1 + bonusTotal / 100);
+  const unidadeRef = unidadeReferencia(escolhidos);
+
+  return { combo: escolhidos, poderTotal, bonusMinersTotal, bonusTotal, valorFinal, unidadeRef, aproximado: true };
+}
+
+const LIMITE_COMBINACOES_EXATAS = 200000;
+
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
@@ -1345,35 +1402,48 @@ function calcularMelhorRack(){
   const resultadosPorRack = [];
 
   for (const rack of racksAtivos){
-    if (poolMiners.length < 4){
+    const slots = rack.slots || 4;
+
+    if (poolMiners.length < slots){
       resultadosPorRack.push({ rack, insuficiente: true });
       continue;
     }
 
-    const combos = combinacoes(poolMiners, 4);
-    const validos = [];
+    let escolhido;
 
-    for (const combo of combos){
-      const nomes = combo.map(m => m.nome);
-      const temRepetido = new Set(nomes).size !== nomes.length;
-      if (temRepetido) continue; // miners com mesmo nome não podem ocupar o mesmo rack
+    if (nCk(poolMiners.length, slots) > LIMITE_COMBINACOES_EXATAS){
+      // Combinações demais para testar todas — usa método aproximado (guloso)
+      escolhido = escolherMelhoresGuloso(poolMiners, slots, rack.bonus);
+      if (!escolhido){
+        resultadosPorRack.push({ rack, semCombinacao: true });
+        continue;
+      }
+    } else {
+      const combos = combinacoes(poolMiners, slots);
+      const validos = [];
 
-      const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
-      const bonusMinersTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
-      const bonusTotal = bonusMinersTotal + Number(rack.bonus);
-      const valorFinal = poderTotal * (1 + bonusTotal / 100);
-      const unidadeRef = unidadeReferencia(combo);
+      for (const combo of combos){
+        const nomes = combo.map(m => m.nome);
+        const temRepetido = new Set(nomes).size !== nomes.length;
+        if (temRepetido) continue; // miners com mesmo nome não podem ocupar o mesmo rack
 
-      validos.push({ combo, poderTotal, bonusMinersTotal, bonusTotal, valorFinal, unidadeRef });
+        const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
+        const bonusMinersTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
+        const bonusTotal = bonusMinersTotal + Number(rack.bonus);
+        const valorFinal = poderTotal * (1 + bonusTotal / 100);
+        const unidadeRef = unidadeReferencia(combo);
+
+        validos.push({ combo, poderTotal, bonusMinersTotal, bonusTotal, valorFinal, unidadeRef });
+      }
+
+      if (!validos.length){
+        resultadosPorRack.push({ rack, semCombinacao: true });
+        continue;
+      }
+
+      validos.sort((a, b) => b.valorFinal - a.valorFinal);
+      escolhido = validos[0];
     }
-
-    if (!validos.length){
-      resultadosPorRack.push({ rack, semCombinacao: true });
-      continue;
-    }
-
-    validos.sort((a, b) => b.valorFinal - a.valorFinal);
-    const escolhido = validos[0];
 
     // remove os miners escolhidos do pool, para o próximo rack (de menor prioridade) não reutilizá-los
     const idsEscolhidos = new Set(escolhido.combo.map(m => m.id));
@@ -1402,7 +1472,7 @@ function calcularMelhorRack(){
     const r = item.resultado;
     return `
       <div class="card">
-        <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}%</div>
+        <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}% · ${r.combo.length} slots${r.aproximado ? ' <span class="tag-off">Estimativa</span>' : ''}</div>
         <div class="rack">
           ${r.combo.map((m, i) => `
             <div class="slot">
