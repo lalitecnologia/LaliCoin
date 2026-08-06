@@ -305,6 +305,9 @@
       <button class="tab-btn active" data-screen="miners" onclick="switchScreen('miners')">
         <span class="ic">⛏</span>Miners
       </button>
+      <button class="tab-btn" data-screen="rack" onclick="switchScreen('rack')">
+        <span class="ic">▤</span>Rack
+      </button>
       <button class="tab-btn" data-screen="calculo" onclick="switchScreen('calculo')">
         <span class="ic">▦</span>Cálculo
       </button>
@@ -356,6 +359,7 @@
             </div>
           </div>
           <div class="field">
+            <label class="check-line"><input type="checkbox" id="miner-ativo" checked> Miner ativo</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-rack" checked> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-cb" checked> Considerar no cálculo de custo-benefício</label>
           </div>
@@ -369,16 +373,52 @@
       </div>
     </section>
 
+    <!-- RACK -->
+    <section id="screen-rack" class="screen">
+      <div class="card">
+        <div class="section-title">Cadastrar rack</div>
+        <form onsubmit="return handleAddRack(event)">
+          <div class="field">
+            <label>Nome do rack</label>
+            <input type="text" id="rack-nome" required placeholder="Ex: Rack Season 24">
+          </div>
+          <div class="field">
+            <label>Bônus (%)</label>
+            <input type="number" id="rack-bonus" required step="any" min="0" placeholder="Ex: 8">
+          </div>
+          <div class="field">
+            <label>Valor pago</label>
+            <div class="moeda-field">
+              <input type="number" id="rack-valor" required step="any" min="0" placeholder="Ex: 5000" style="flex:1;">
+              <span class="coin-badge" id="rack-moeda-badge"></span>
+              <select id="rack-moeda" onchange="atualizarBadge('rack-moeda-badge', this.value)" style="flex:1.4;"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="check-line"><input type="checkbox" id="rack-ativo" checked> Rack ativo</label>
+          </div>
+          <button type="submit" class="btn btn-primary">Adicionar rack</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Seus racks</div>
+        <div id="racks-list"><div class="empty-state">Nenhum rack cadastrado ainda.</div></div>
+      </div>
+    </section>
+
     <!-- CÁLCULO -->
     <section id="screen-calculo" class="screen">
       <div class="card">
-        <div class="section-title">Melhor combinação de rack (4 slots)</div>
+        <div class="section-title">Melhor combinação por rack</div>
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
-          Calcula a melhor combinação de 4 miners para o rack. Miners com o mesmo nome não podem
-          ocupar o mesmo rack juntos — o cálculo é: some o poder dos 4 miners, depois aplique a soma
-          dos bônus sobre esse total.
+          Distribui seus miners ativos entre os racks ativos, 4 por rack. Racks com maior bônus têm
+          prioridade e escolhem primeiro os melhores miners disponíveis; um miner só pode ocupar um
+          rack por vez, e miners com o mesmo nome não podem estar juntos no mesmo rack. Para cada
+          rack, o cálculo soma o poder dos 4 miners e aplica sobre esse total o bônus dos miners somado
+          ao bônus do próprio rack.
         </p>
-        <button class="btn btn-primary" style="margin-top:14px;" onclick="calcularMelhorRack()">Calcular melhor rack</button>
+        <button class="btn btn-primary" style="margin-top:14px;" onclick="calcularMelhorRack()">Calcular distribuição</button>
       </div>
 
       <div id="resultado-calculo"></div>
@@ -428,6 +468,7 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 let currentUser = null;
 let currentProfile = null;
 let myMiners = [];
+let myRacks = [];
 
 /* ---------------- Unidades de poder ---------------- */
 const UNIDADES_FATOR = {
@@ -508,6 +549,12 @@ function popularSelectsMoeda(){
     selCadastro.innerHTML = opcoesMoeda('RST');
     selCadastro.dataset.filled = '1';
     atualizarBadge('miner-moeda-badge', 'RST');
+  }
+  const selRack = document.getElementById('rack-moeda');
+  if (selRack && !selRack.dataset.filled){
+    selRack.innerHTML = opcoesMoeda('RST');
+    selRack.dataset.filled = '1';
+    atualizarBadge('rack-moeda-badge', 'RST');
   }
 }
 
@@ -656,6 +703,7 @@ async function onAuthReady(user){
 
   popularSelectsMoeda();
   await loadMiners();
+  await loadRacks();
 }
 
 /* ---------------- Screens / nav ---------------- */
@@ -713,6 +761,7 @@ function renderMiners(){
             </div>
           </div>
           <div class="field" style="margin-bottom:0;">
+            <label class="check-line"><input type="checkbox" id="edit-ativo-${m.id}" ${m.ativo !== false ? 'checked' : ''}> Miner ativo</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-rack-${m.id}" ${m.usar_rack !== false ? 'checked' : ''}> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-cb-${m.id}" ${m.usar_cb !== false ? 'checked' : ''}> Considerar no cálculo de custo-benefício</label>
           </div>
@@ -724,6 +773,7 @@ function renderMiners(){
       `;
     }
     const tagsOff = [
+      m.ativo === false ? '<span class="tag-off">Inativo</span>' : '',
       m.usar_rack === false ? '<span class="tag-off">Fora do rack</span>' : '',
       m.usar_cb === false ? '<span class="tag-off">Fora do custo-benefício</span>' : ''
     ].filter(Boolean).join(' ');
@@ -764,6 +814,7 @@ async function saveMinerEdit(id){
   const bonus = parseFloat(document.getElementById(`edit-bonus-${id}`).value);
   const valor = parseFloat(document.getElementById(`edit-valor-${id}`).value);
   const moeda = document.getElementById(`edit-moeda-${id}`).value;
+  const ativo = document.getElementById(`edit-ativo-${id}`).checked;
   const usar_rack = document.getElementById(`edit-usar-rack-${id}`).checked;
   const usar_cb = document.getElementById(`edit-usar-cb-${id}`).checked;
 
@@ -774,7 +825,7 @@ async function saveMinerEdit(id){
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').update({ nome, poder, unidade, poder_hs, bonus, valor, moeda, usar_rack, usar_cb }).eq('id', id);
+    .from('miners').update({ nome, poder, unidade, poder_hs, bonus, valor, moeda, ativo, usar_rack, usar_cb }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -793,12 +844,13 @@ async function handleAddMiner(e){
   const bonus = parseFloat(document.getElementById('miner-bonus').value);
   const valor = parseFloat(document.getElementById('miner-valor').value);
   const moeda = document.getElementById('miner-moeda').value;
+  const ativo = document.getElementById('miner-ativo').checked;
   const usar_rack = document.getElementById('miner-usar-rack').checked;
   const usar_cb = document.getElementById('miner-usar-cb').checked;
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus, valor, moeda, usar_rack, usar_cb });
+    .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus, valor, moeda, ativo, usar_rack, usar_cb });
 
   if (error){
     showToast('Erro ao adicionar miner.');
@@ -820,6 +872,137 @@ async function deleteMiner(id){
   await loadMiners();
 }
 
+/* ---------------- Racks CRUD ---------------- */
+let editingRackId = null;
+
+async function loadRacks(){
+  const { data, error } = await supabaseClient
+    .from('racks').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true });
+  myRacks = data || [];
+  renderRacks();
+}
+
+function renderRacks(){
+  const list = document.getElementById('racks-list');
+  if (!myRacks.length){
+    list.innerHTML = '<div class="empty-state">Nenhum rack cadastrado ainda.</div>';
+    return;
+  }
+  list.innerHTML = myRacks.map(r => {
+    if (r.id === editingRackId){
+      const opcoesMoedaEdit = opcoesMoeda(r.moeda || 'RST');
+      return `
+        <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div class="field" style="margin-bottom:0;">
+            <label>Nome do rack</label>
+            <input type="text" id="edit-rack-nome-${r.id}" value="${escapeHtml(r.nome)}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Bônus (%)</label>
+            <input type="number" step="any" min="0" id="edit-rack-bonus-${r.id}" value="${r.bonus}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Valor pago</label>
+            <div class="moeda-field">
+              <input type="number" step="any" min="0" id="edit-rack-valor-${r.id}" value="${r.valor ?? ''}" style="flex:1;">
+              <span class="coin-badge" id="edit-rack-moeda-badge-${r.id}"></span>
+              <select id="edit-rack-moeda-${r.id}" onchange="atualizarBadge('edit-rack-moeda-badge-${r.id}', this.value)" style="flex:1.4;">${opcoesMoedaEdit}</select>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="check-line"><input type="checkbox" id="edit-rack-ativo-${r.id}" ${r.ativo !== false ? 'checked' : ''}> Rack ativo</label>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:4px;">
+            <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveRackEdit('${r.id}')">Salvar</button>
+            <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="cancelRackEdit()">Cancelar</button>
+          </div>
+        </div>
+      `;
+    }
+    const tagOff = r.ativo === false ? '<span class="tag-off">Inativo</span>' : '';
+    return `
+    <div class="miner-row">
+      <div class="miner-info">
+        <div class="name">${escapeHtml(r.nome)} ${tagOff}</div>
+        <div class="stats">Bônus: ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') : ''}</div>
+      </div>
+      <div class="miner-actions">
+        <button class="icon-btn" onclick="startRackEdit('${r.id}')" title="Editar">✎</button>
+        <button class="icon-btn" onclick="deleteRack('${r.id}')" title="Remover">✕</button>
+      </div>
+    </div>
+  `;
+  }).join('');
+  if (editingRackId){
+    const r = myRacks.find(x => x.id === editingRackId);
+    if (r) atualizarBadge(`edit-rack-moeda-badge-${r.id}`, r.moeda || 'RST');
+  }
+}
+
+function startRackEdit(id){
+  editingRackId = id;
+  renderRacks();
+}
+
+function cancelRackEdit(){
+  editingRackId = null;
+  renderRacks();
+}
+
+async function saveRackEdit(id){
+  const nome = document.getElementById(`edit-rack-nome-${id}`).value.trim();
+  const bonus = parseFloat(document.getElementById(`edit-rack-bonus-${id}`).value);
+  const valor = parseFloat(document.getElementById(`edit-rack-valor-${id}`).value);
+  const moeda = document.getElementById(`edit-rack-moeda-${id}`).value;
+  const ativo = document.getElementById(`edit-rack-ativo-${id}`).checked;
+
+  if (!nome || isNaN(bonus) || isNaN(valor)){
+    showToast('Preencha todos os campos corretamente.');
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from('racks').update({ nome, bonus, valor, moeda, ativo }).eq('id', id);
+
+  if (error){
+    showToast('Erro ao salvar alterações.');
+    return;
+  }
+  editingRackId = null;
+  showToast('Rack atualizado.');
+  await loadRacks();
+}
+
+async function handleAddRack(e){
+  e.preventDefault();
+  const nome = document.getElementById('rack-nome').value.trim();
+  const bonus = parseFloat(document.getElementById('rack-bonus').value);
+  const valor = parseFloat(document.getElementById('rack-valor').value);
+  const moeda = document.getElementById('rack-moeda').value;
+  const ativo = document.getElementById('rack-ativo').checked;
+
+  const { error } = await supabaseClient
+    .from('racks').insert({ user_id: currentUser.id, nome, bonus, valor, moeda, ativo });
+
+  if (error){
+    showToast('Erro ao adicionar rack.');
+    return false;
+  }
+  document.getElementById('rack-nome').value = '';
+  document.getElementById('rack-bonus').value = '';
+  document.getElementById('rack-valor').value = '';
+  showToast('Rack adicionado.');
+  await loadRacks();
+  return false;
+}
+
+async function deleteRack(id){
+  const { error } = await supabaseClient.from('racks').delete().eq('id', id);
+  if (error){ showToast('Erro ao remover rack.'); return; }
+  showToast('Rack removido.');
+  await loadRacks();
+}
+
 /* ---------------- Cálculo do melhor rack ---------------- */
 function combinacoes(arr, k){
   const resultado = [];
@@ -838,85 +1021,109 @@ function combinacoes(arr, k){
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
-  const elegiveis = myMiners.filter(m => m.usar_rack !== false);
-
-  if (elegiveis.length < 4){
-    box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "considerar no rack") pelo menos 4 miners para calcular.</div></div>`;
+  const racksAtivos = myRacks.filter(r => r.ativo !== false).sort((a, b) => Number(b.bonus) - Number(a.bonus));
+  if (!racksAtivos.length){
+    box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "ativo") pelo menos um rack na aba Rack.</div></div>`;
     return;
   }
 
-  const combos = combinacoes(elegiveis, 4);
-  const validos = [];
+  let poolMiners = myMiners.filter(m => m.usar_rack !== false && m.ativo !== false);
 
-  for (const combo of combos){
-    const nomes = combo.map(m => m.nome);
-    const temRepetido = new Set(nomes).size !== nomes.length;
-    if (temRepetido) continue; // miners com mesmo nome não podem ocupar o mesmo rack
+  const resultadosPorRack = [];
 
-    const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
-    const bonusTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
-    const valorFinal = poderTotal * (1 + bonusTotal / 100);
-    const unidadeRef = unidadeReferencia(combo);
+  for (const rack of racksAtivos){
+    if (poolMiners.length < 4){
+      resultadosPorRack.push({ rack, insuficiente: true });
+      continue;
+    }
 
-    validos.push({ combo, poderTotal, bonusTotal, valorFinal, unidadeRef });
+    const combos = combinacoes(poolMiners, 4);
+    const validos = [];
+
+    for (const combo of combos){
+      const nomes = combo.map(m => m.nome);
+      const temRepetido = new Set(nomes).size !== nomes.length;
+      if (temRepetido) continue; // miners com mesmo nome não podem ocupar o mesmo rack
+
+      const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
+      const bonusMinersTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
+      const bonusTotal = bonusMinersTotal + Number(rack.bonus);
+      const valorFinal = poderTotal * (1 + bonusTotal / 100);
+      const unidadeRef = unidadeReferencia(combo);
+
+      validos.push({ combo, poderTotal, bonusMinersTotal, bonusTotal, valorFinal, unidadeRef });
+    }
+
+    if (!validos.length){
+      resultadosPorRack.push({ rack, semCombinacao: true });
+      continue;
+    }
+
+    validos.sort((a, b) => b.valorFinal - a.valorFinal);
+    const escolhido = validos[0];
+
+    // remove os miners escolhidos do pool, para o próximo rack (de menor prioridade) não reutilizá-los
+    const idsEscolhidos = new Set(escolhido.combo.map(m => m.id));
+    poolMiners = poolMiners.filter(m => !idsEscolhidos.has(m.id));
+
+    resultadosPorRack.push({ rack, resultado: escolhido });
   }
 
-  if (!validos.length){
-    box.innerHTML = `<div class="card"><div class="empty-state">Nenhuma combinação válida encontrada — miners repetidos demais.</div></div>`;
-    return;
-  }
-
-  validos.sort((a, b) => b.valorFinal - a.valorFinal);
-  const melhor = validos[0];
-  const alternativas = validos.slice(1, 6);
-
-  box.innerHTML = `
-    <div class="card">
-      <div class="section-title">Melhor rack encontrado</div>
-      <div class="rack">
-        ${melhor.combo.map((m, i) => `
-          <div class="slot">
-            <div class="num">SLOT ${i + 1}</div>
-            <div class="name">${escapeHtml(m.nome)}</div>
-            <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
-            <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
+  box.innerHTML = resultadosPorRack.map(item => {
+    if (item.insuficiente){
+      return `
+        <div class="card">
+          <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}%</div>
+          <div class="empty-state">Não há miners suficientes disponíveis para este rack (já usados nos racks de maior prioridade).</div>
+        </div>
+      `;
+    }
+    if (item.semCombinacao){
+      return `
+        <div class="card">
+          <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}%</div>
+          <div class="empty-state">Nenhuma combinação válida encontrada — miners repetidos demais.</div>
+        </div>
+      `;
+    }
+    const r = item.resultado;
+    return `
+      <div class="card">
+        <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}%</div>
+        <div class="rack">
+          ${r.combo.map((m, i) => `
+            <div class="slot">
+              <div class="num">SLOT ${i + 1}</div>
+              <div class="name">${escapeHtml(m.nome)}</div>
+              <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
+              <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="result-summary">
+          <div class="metric">
+            <div class="val">${formatarPoderEm(r.poderTotal, r.unidadeRef)}</div>
+            <div class="lbl">Poder total</div>
           </div>
-        `).join('')}
-      </div>
-      <div class="result-summary">
-        <div class="metric">
-          <div class="val">${formatarPoderEm(melhor.poderTotal, melhor.unidadeRef)}</div>
-          <div class="lbl">Poder total</div>
-        </div>
-        <div class="metric">
-          <div class="val">${melhor.bonusTotal.toFixed(2)}%</div>
-          <div class="lbl">Bônus total</div>
-        </div>
-        <div class="metric">
-          <div class="val">${formatarPoderEm(melhor.valorFinal, melhor.unidadeRef)}</div>
-          <div class="lbl">Valor final</div>
+          <div class="metric">
+            <div class="val">${r.bonusTotal.toFixed(2)}%</div>
+            <div class="lbl">Bônus total (miners + rack)</div>
+          </div>
+          <div class="metric">
+            <div class="val">${formatarPoderEm(r.valorFinal, r.unidadeRef)}</div>
+            <div class="lbl">Valor final</div>
+          </div>
         </div>
       </div>
-    </div>
-
-    ${alternativas.length ? `
-    <div class="card">
-      <div class="section-title">Próximas melhores combinações</div>
-      ${alternativas.map(a => `
-        <div class="alt-item">
-          <div class="names">${a.combo.map(m => m.nome).join(' + ')}</div>
-          <div class="score">${formatarPoderEm(a.valorFinal, a.unidadeRef)}</div>
-        </div>
-      `).join('')}
-    </div>` : ''}
-  `;
+    `;
+  }).join('');
 }
 
 /* ---------------- Custo-benefício ---------------- */
 function calcularCustoBeneficio(){
   const box = document.getElementById('resultado-custobeneficio');
 
-  const comValor = myMiners.filter(m => m.valor && m.valor > 0 && m.usar_cb !== false);
+  const comValor = myMiners.filter(m => m.valor && m.valor > 0 && m.usar_cb !== false && m.ativo !== false);
   if (!comValor.length){
     box.innerHTML = `<div class="card"><div class="empty-state">Nenhum miner elegível com valor pago cadastrado. Confira o campo "Valor pago" e a opção "Considerar no cálculo de custo-benefício".</div></div>`;
     return;
