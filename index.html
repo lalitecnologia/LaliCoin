@@ -309,6 +309,9 @@
       <button class="tab-btn" data-screen="rack" onclick="switchScreen('rack')">
         <span class="ic">▤</span>Rack
       </button>
+      <button class="tab-btn" data-screen="indice" onclick="switchScreen('indice')">
+        <span class="ic">⚖</span>Índice
+      </button>
       <button class="tab-btn" data-screen="calculo" onclick="switchScreen('calculo')">
         <span class="ic">▦</span>Cálculo
       </button>
@@ -418,6 +421,64 @@
       </div>
     </section>
 
+    <!-- ÍNDICE DE RACKS (candidatos, não são "seus" racks) -->
+    <section id="screen-indice" class="screen">
+      <div class="card">
+        <div class="section-title">Índice de racks (comparação)</div>
+        <p style="font-size:13px; color:var(--muted); line-height:1.5;">
+          Registre aqui racks que você está avaliando comprar, viu de outros jogadores, ou só quer
+          comparar — sem misturar com os seus racks reais. O índice usa um poder padrão de
+          <b>1 PH/s por slot</b> pra comparar racks de forma justa, independente de quais miners
+          você realmente tem. O valor pago é só informativo, não entra na conta.
+        </p>
+
+        <button type="button" class="btn btn-ghost" id="btn-ler-imagem-indice" style="margin-top:14px;" onclick="document.getElementById('indice-imagem-input').click()">
+          📷 Ler imagem do rack
+        </button>
+        <input type="file" id="indice-imagem-input" accept="image/*" style="display:none;" onchange="lerImagemIndice(event)">
+        <p class="hint" style="margin-top:8px; margin-bottom:16px;">
+          Se cadastrar de novo um rack com o mesmo nome aqui, ele é atualizado (sobrescrito) — já
+          que estes não são os seus racks reais, não tem problema substituir.
+        </p>
+
+        <form onsubmit="return handleAddCandidato(event)">
+          <div class="field">
+            <label>Nome do rack</label>
+            <input type="text" id="candidato-nome" required placeholder="Ex: Rack visto no marketplace">
+          </div>
+          <div class="field">
+            <label>Bônus (%)</label>
+            <input type="number" id="candidato-bonus" required step="any" min="0" placeholder="Ex: 8">
+          </div>
+          <div class="field">
+            <label>Número de slots</label>
+            <input type="number" id="candidato-slots" required step="1" min="1" value="4" placeholder="Ex: 4">
+          </div>
+          <div class="field">
+            <label>Valor (informativo)</label>
+            <div class="moeda-field">
+              <input type="number" id="candidato-valor" step="any" min="0" placeholder="Ex: 5000" style="flex:1;">
+              <span class="coin-badge" id="candidato-moeda-badge"></span>
+              <select id="candidato-moeda" onchange="atualizarBadge('candidato-moeda-badge', this.value)" style="flex:1.4;"></select>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary">Adicionar / atualizar candidato</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Racks candidatos cadastrados</div>
+        <div id="candidatos-list"><div class="empty-state">Nenhum rack candidato cadastrado ainda.</div></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Ranking dos candidatos</div>
+        <button class="btn btn-primary" onclick="calcularIndiceRacks()">Calcular ranking</button>
+      </div>
+
+      <div id="resultado-indice"></div>
+    </section>
+
     <!-- CÁLCULO -->
     <section id="screen-calculo" class="screen">
       <div class="card">
@@ -480,6 +541,7 @@ let currentUser = null;
 let currentProfile = null;
 let myMiners = [];
 let myRacks = [];
+let myCandidatos = [];
 
 /* ---------------- Unidades de poder ---------------- */
 const UNIDADES_FATOR = {
@@ -566,6 +628,12 @@ function popularSelectsMoeda(){
     selRack.innerHTML = opcoesMoeda('RST');
     selRack.dataset.filled = '1';
     atualizarBadge('rack-moeda-badge', 'RST');
+  }
+  const selCand = document.getElementById('candidato-moeda');
+  if (selCand && !selCand.dataset.filled){
+    selCand.innerHTML = opcoesMoeda('RST');
+    selCand.dataset.filled = '1';
+    atualizarBadge('candidato-moeda-badge', 'RST');
   }
 }
 
@@ -715,6 +783,7 @@ async function onAuthReady(user){
   popularSelectsMoeda();
   await loadMiners();
   await loadRacks();
+  await loadCandidatos();
 }
 
 /* ---------------- Screens / nav ---------------- */
@@ -1082,6 +1151,169 @@ async function deleteRack(id){
   if (error){ showToast('Erro ao remover rack.'); return; }
   showToast('Rack removido.');
   await loadRacks();
+}
+
+/* ---------------- Racks candidatos (tabela separada, só para comparação) ---------------- */
+async function loadCandidatos(){
+  const { data, error } = await supabaseClient
+    .from('rack_candidatos').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true });
+  myCandidatos = data || [];
+  renderCandidatos();
+}
+
+function renderCandidatos(){
+  const list = document.getElementById('candidatos-list');
+  if (!myCandidatos.length){
+    list.innerHTML = '<div class="empty-state">Nenhum rack candidato cadastrado ainda.</div>';
+    return;
+  }
+  list.innerHTML = myCandidatos.map(c => `
+    <div class="miner-row">
+      <div class="miner-info">
+        <div class="name">${escapeHtml(c.nome)}</div>
+        <div class="stats">${c.slots} slots · Bônus: ${fmtNum(c.bonus)}%${c.valor ? ' · ' + fmtNum(c.valor) + ' ' + (c.moeda || 'RST') + ' (informativo)' : ''}</div>
+      </div>
+      <div class="miner-actions">
+        <button class="icon-btn" onclick="deleteCandidato('${c.id}')" title="Remover">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function handleAddCandidato(e){
+  e.preventDefault();
+  const nome = document.getElementById('candidato-nome').value.trim();
+  const bonus = parseFloat(document.getElementById('candidato-bonus').value);
+  const slots = parseInt(document.getElementById('candidato-slots').value, 10);
+  const valorRaw = document.getElementById('candidato-valor').value;
+  const valor = valorRaw ? parseFloat(valorRaw) : null;
+  const moeda = document.getElementById('candidato-moeda').value;
+
+  // Como não é um rack seu de verdade, se já existir um candidato com o mesmo nome, atualiza em vez de duplicar
+  const existente = myCandidatos.find(c => c.nome.trim().toLowerCase() === nome.toLowerCase());
+
+  let error;
+  if (existente){
+    ({ error } = await supabaseClient
+      .from('rack_candidatos').update({ bonus, slots, valor, moeda }).eq('id', existente.id));
+  } else {
+    ({ error } = await supabaseClient
+      .from('rack_candidatos').insert({ user_id: currentUser.id, nome, bonus, slots, valor, moeda }));
+  }
+
+  if (error){
+    showToast('Erro ao salvar candidato.');
+    return false;
+  }
+  document.getElementById('candidato-nome').value = '';
+  document.getElementById('candidato-bonus').value = '';
+  document.getElementById('candidato-slots').value = '4';
+  document.getElementById('candidato-valor').value = '';
+  showToast(existente ? 'Candidato atualizado.' : 'Candidato adicionado.');
+  await loadCandidatos();
+  return false;
+}
+
+async function deleteCandidato(id){
+  const { error } = await supabaseClient.from('rack_candidatos').delete().eq('id', id);
+  if (error){ showToast('Erro ao remover candidato.'); return; }
+  showToast('Candidato removido.');
+  await loadCandidatos();
+}
+
+/* ---------------- Leitura de imagem (OCR) para racks candidatos ---------------- */
+async function lerImagemIndice(event){
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const btn = document.getElementById('btn-ler-imagem-indice');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Lendo imagem...';
+
+  try {
+    const { data } = await Tesseract.recognize(file, 'por+eng');
+    const texto = data.text || '';
+    preencherFormularioCandidatoComOcr(texto);
+    showToast('Dados extraídos — revise antes de salvar.');
+  } catch (err){
+    showToast('Não foi possível ler a imagem. Preencha manualmente.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+    event.target.value = '';
+  }
+}
+
+function preencherFormularioCandidatoComOcr(texto){
+  const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+
+  const matchBonus = texto.match(/(\d+[.,]?\d*)\s*%/);
+  if (matchBonus) document.getElementById('candidato-bonus').value = matchBonus[1].replace(',', '.');
+
+  const matchSlots = texto.match(/(\d+)\s*(slots?|espaços?|vagas?)/i);
+  if (matchSlots) document.getElementById('candidato-slots').value = matchSlots[1];
+
+  let valorEncontrado = null, moedaEncontrada = null;
+  for (const codigo of MOEDAS){
+    const regex = new RegExp('([\\d.,]+)\\s*' + codigo + '|' + codigo + '\\s*([\\d.,]+)', 'i');
+    const m = texto.match(regex);
+    if (m){
+      const bruto = (m[1] || m[2] || '').replace(/\.(?=\d{3})/g, '').replace(',', '.');
+      const num = parseFloat(bruto);
+      if (!isNaN(num)){ valorEncontrado = num; moedaEncontrada = codigo; break; }
+    }
+  }
+  if (valorEncontrado !== null) document.getElementById('candidato-valor').value = valorEncontrado;
+  if (moedaEncontrada){
+    document.getElementById('candidato-moeda').value = moedaEncontrada;
+    atualizarBadge('candidato-moeda-badge', moedaEncontrada);
+  }
+
+  const linhaNome = linhas.find(l => {
+    const semEspaco = l.replace(/\s/g, '');
+    if (semEspaco.length < 3) return false;
+    if (/^[\d.,%]+$/.test(semEspaco)) return false;
+    if (MOEDAS.some(c => new RegExp('^' + c + '$', 'i').test(semEspaco))) return false;
+    if (/slots?|espaços?|vagas?/i.test(l)) return false;
+    return true;
+  });
+  if (linhaNome) document.getElementById('candidato-nome').value = linhaNome;
+}
+
+/* ---------------- Índice de comparação dos racks candidatos ---------------- */
+function calcularIndiceRacks(){
+  const box = document.getElementById('resultado-indice');
+
+  if (!myCandidatos.length){
+    box.innerHTML = `<div class="card"><div class="empty-state">Cadastre pelo menos um rack candidato acima.</div></div>`;
+    return;
+  }
+
+  const poderPadraoPorSlot = paraHs(1, 'PH/s'); // referência: 1 PH/s por slot
+
+  const itens = myCandidatos.map(c => {
+    const indice = c.slots * poderPadraoPorSlot * (1 + Number(c.bonus) / 100);
+    return { ...c, indice };
+  }).sort((a, b) => b.indice - a.indice);
+
+  box.innerHTML = `
+    <div class="card">
+      ${itens.map((c, i) => `
+        <div class="cb-row">
+          <div class="cb-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)}</div>
+          <div class="cb-info">
+            <div class="name">${escapeHtml(c.nome)}</div>
+            <div class="stats">${c.slots} slots · Bônus ${fmtNum(c.bonus)}%${c.valor ? ' · ' + fmtNum(c.valor) + ' ' + (c.moeda || 'RST') + ' (não entra na conta)' : ''}</div>
+          </div>
+          <div class="cb-score">
+            <div class="val">${formatarPoder(c.indice)}</div>
+            <div class="lbl">índice</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 /* ---------------- Cálculo do melhor rack ---------------- */
