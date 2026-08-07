@@ -1257,6 +1257,7 @@ async function lerImagemIndice(event){
     candidatosExtraidosOcr = extrairRacksMultiplos(texto);
     if (!candidatosExtraidosOcr.length){
       showToast('Não consegui identificar nenhum rack nessa imagem.');
+      mostrarTextoBrutoOcr(texto);
     } else {
       showToast(`${candidatosExtraidosOcr.length} rack(s) encontrado(s) — revise antes de importar.`);
     }
@@ -1268,6 +1269,20 @@ async function lerImagemIndice(event){
     btn.textContent = textoOriginal;
     event.target.value = '';
   }
+}
+
+function mostrarTextoBrutoOcr(texto){
+  const box = document.getElementById('preview-ocr-indice');
+  box.innerHTML = `
+    <div class="card">
+      <div class="section-title">Texto bruto lido da imagem</div>
+      <p class="hint" style="margin-bottom:10px;">
+        Não consegui reconhecer o padrão automaticamente. Copie o texto abaixo e envie pra mim
+        no chat — assim ajusto a leitura pro formato exato que está saindo aqui.
+      </p>
+      <textarea readonly style="width:100%; min-height:180px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:11px;">${escapeHtml(texto)}</textarea>
+    </div>
+  `;
 }
 
 // Extrai vários racks de uma lista tipo marketplace do RollerCoin.
