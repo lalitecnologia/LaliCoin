@@ -437,13 +437,19 @@
         </p>
 
         <button type="button" class="btn btn-ghost" id="btn-ler-imagem-indice" style="margin-top:14px;" onclick="document.getElementById('indice-imagem-input').click()">
-          📷 Ler imagem do rack
+          📷 Ler imagem do rack (ou de uma lista com vários)
         </button>
         <input type="file" id="indice-imagem-input" accept="image/*" style="display:none;" onchange="lerImagemIndice(event)">
-        <p class="hint" style="margin-top:8px; margin-bottom:16px;">
-          Se cadastrar de novo um rack com o mesmo nome aqui, ele é atualizado (sobrescrito) — já
-          que estes não são os seus racks reais, não tem problema substituir.
+        <p class="hint" style="margin-top:8px; margin-bottom:0;">
+          Funciona com print de um rack só ou de uma lista inteira (tipo o marketplace do RollerCoin).
+          Depois de ler, você confere e edita cada um antes de importar — nada é salvo sozinho.
         </p>
+      </div>
+
+      <div id="preview-ocr-indice"></div>
+
+      <div class="card">
+        <div class="section-title">Cadastrar manualmente</div>
 
         <form onsubmit="return handleAddCandidato(event)">
           <div class="field">
@@ -1211,15 +1217,7 @@ async function handleAddCandidato(e){
 
   // Como não é um rack seu de verdade, se já existir um candidato com o mesmo nome, atualiza em vez de duplicar
   const existente = myCandidatos.find(c => c.nome.trim().toLowerCase() === nome.toLowerCase());
-
-  let error;
-  if (existente){
-    ({ error } = await supabaseClient
-      .from('rack_candidatos').update({ bonus, slots, valor, moeda }).eq('id', existente.id));
-  } else {
-    ({ error } = await supabaseClient
-      .from('rack_candidatos').insert({ user_id: currentUser.id, nome, bonus, slots, valor, moeda }));
-  }
+  const { error } = await salvarCandidato(nome, bonus, slots, valor, moeda);
 
   if (error){
     showToast('Erro ao salvar candidato.');
@@ -1242,6 +1240,8 @@ async function deleteCandidato(id){
 }
 
 /* ---------------- Leitura de imagem (OCR) para racks candidatos ---------------- */
+let candidatosExtraidosOcr = [];
+
 async function lerImagemIndice(event){
   const file = event.target.files[0];
   if (!file) return;
@@ -1254,8 +1254,13 @@ async function lerImagemIndice(event){
   try {
     const { data } = await Tesseract.recognize(file, 'por+eng');
     const texto = data.text || '';
-    preencherFormularioCandidatoComOcr(texto);
-    showToast('Dados extraídos — revise antes de salvar.');
+    candidatosExtraidosOcr = extrairRacksMultiplos(texto);
+    if (!candidatosExtraidosOcr.length){
+      showToast('Não consegui identificar nenhum rack nessa imagem.');
+    } else {
+      showToast(`${candidatosExtraidosOcr.length} rack(s) encontrado(s) — revise antes de importar.`);
+    }
+    renderPreviewOcrIndice();
   } catch (err){
     showToast('Não foi possível ler a imagem. Preencha manualmente.');
   } finally {
@@ -1265,40 +1270,134 @@ async function lerImagemIndice(event){
   }
 }
 
-function preencherFormularioCandidatoComOcr(texto){
+// Extrai vários racks de uma lista tipo marketplace do RollerCoin.
+// Padrão de cada item: "Nome Slots" / "Bônus%" / "Quantidade: N" (ignorado) / "De" / "Preço Moeda"
+function extrairRacksMultiplos(texto){
   const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+  const registros = [];
+  let atual = null;
 
-  const matchBonus = texto.match(/(\d+[.,]?\d*)\s*%/);
-  if (matchBonus) document.getElementById('candidato-bonus').value = matchBonus[1].replace(',', '.');
+  for (const linha of linhas){
+    if (/^quantidade/i.test(linha)) continue;          // "Quantidade: X" — sempre ignorado
+    if (/^de$/i.test(linha)) continue;                  // rótulo "De" antes do preço
+    if (/in\s*collection/i.test(linha)) continue;        // selo "IN COLLECTION"
 
-  const matchSlots = texto.match(/(\d+)\s*(slots?|espaços?|vagas?)/i);
-  if (matchSlots) document.getElementById('candidato-slots').value = matchSlots[1];
+    // linha de preço: número + código de moeda conhecido (o RollerCoin usa ponto como decimal aqui)
+    let matchPreco = null;
+    for (const codigo of MOEDAS){
+      const regex = new RegExp('^([\\d.,]+)\\s*' + codigo + '$', 'i');
+      const m = linha.match(regex);
+      if (m){
+        matchPreco = { valor: parseFloat(m[1].replace(',', '.')), moeda: codigo };
+        break;
+      }
+    }
+    if (matchPreco && atual){
+      atual.valor = matchPreco.valor;
+      atual.moeda = matchPreco.moeda;
+      continue;
+    }
 
-  let valorEncontrado = null, moedaEncontrada = null;
-  for (const codigo of MOEDAS){
-    const regex = new RegExp('([\\d.,]+)\\s*' + codigo + '|' + codigo + '\\s*([\\d.,]+)', 'i');
-    const m = texto.match(regex);
-    if (m){
-      const bruto = (m[1] || m[2] || '').replace(/\.(?=\d{3})/g, '').replace(',', '.');
-      const num = parseFloat(bruto);
-      if (!isNaN(num)){ valorEncontrado = num; moedaEncontrada = codigo; break; }
+    // linha de bônus: só um número seguido de %
+    const matchBonus = linha.match(/^(\d+[.,]?\d*)\s*%$/);
+    if (matchBonus && atual){
+      atual.bonus = parseFloat(matchBonus[1].replace(',', '.'));
+      continue;
+    }
+
+    // linha de nome + slots grudados no final (ex: "Red Silk 8")
+    const matchNomeSlots = linha.match(/^(.+?)\s+(\d{1,2})$/);
+    if (matchNomeSlots){
+      if (atual && atual.nome) registros.push(atual);
+      atual = {
+        nome: matchNomeSlots[1].trim(),
+        slots: parseInt(matchNomeSlots[2], 10),
+        bonus: null,
+        valor: null,
+        moeda: 'RST'
+      };
+      continue;
     }
   }
-  if (valorEncontrado !== null) document.getElementById('candidato-valor').value = valorEncontrado;
-  if (moedaEncontrada){
-    document.getElementById('candidato-moeda').value = moedaEncontrada;
-    atualizarBadge('candidato-moeda-badge', moedaEncontrada);
+  if (atual && atual.nome) registros.push(atual);
+  return registros;
+}
+
+function renderPreviewOcrIndice(){
+  const box = document.getElementById('preview-ocr-indice');
+  if (!candidatosExtraidosOcr.length){
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = `
+    <div class="card">
+      <div class="section-title">Racks encontrados na imagem — revise antes de importar</div>
+      ${candidatosExtraidosOcr.map((c, i) => `
+        <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <label class="check-line" style="margin-bottom:0;">
+            <input type="checkbox" id="ocr-incluir-${i}" checked> Importar este rack
+          </label>
+          <div class="field" style="margin-bottom:0;">
+            <label>Nome</label>
+            <input type="text" id="ocr-nome-${i}" value="${escapeHtml(c.nome)}">
+          </div>
+          <div style="display:flex; gap:8px;">
+            <div class="field" style="margin-bottom:0; flex:1;">
+              <label>Bônus (%)</label>
+              <input type="number" step="any" min="0" id="ocr-bonus-${i}" value="${c.bonus ?? ''}">
+            </div>
+            <div class="field" style="margin-bottom:0; flex:1;">
+              <label>Slots</label>
+              <input type="number" step="1" min="1" id="ocr-slots-${i}" value="${c.slots ?? 4}">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Valor (informativo)</label>
+            <div class="moeda-field">
+              <input type="number" step="any" min="0" id="ocr-valor-${i}" value="${c.valor ?? ''}" style="flex:1;">
+              <span class="coin-badge" id="ocr-moeda-badge-${i}"></span>
+              <select id="ocr-moeda-${i}" onchange="atualizarBadge('ocr-moeda-badge-${i}', this.value)" style="flex:1.4;">${opcoesMoeda(c.moeda || 'RST')}</select>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+      <button class="btn btn-primary" style="margin-top:8px;" onclick="importarCandidatosOcr()">Importar selecionados</button>
+    </div>
+  `;
+  candidatosExtraidosOcr.forEach((c, i) => atualizarBadge(`ocr-moeda-badge-${i}`, c.moeda || 'RST'));
+}
+
+async function salvarCandidato(nome, bonus, slots, valor, moeda){
+  const existente = myCandidatos.find(c => c.nome.trim().toLowerCase() === nome.trim().toLowerCase());
+  if (existente){
+    return supabaseClient.from('rack_candidatos').update({ bonus, slots, valor, moeda }).eq('id', existente.id);
+  }
+  return supabaseClient.from('rack_candidatos').insert({ user_id: currentUser.id, nome, bonus, slots, valor, moeda });
+}
+
+async function importarCandidatosOcr(){
+  let importados = 0;
+  for (let i = 0; i < candidatosExtraidosOcr.length; i++){
+    const incluir = document.getElementById(`ocr-incluir-${i}`)?.checked;
+    if (!incluir) continue;
+
+    const nome = document.getElementById(`ocr-nome-${i}`).value.trim();
+    const bonus = parseFloat(document.getElementById(`ocr-bonus-${i}`).value);
+    const slots = parseInt(document.getElementById(`ocr-slots-${i}`).value, 10);
+    const valorRaw = document.getElementById(`ocr-valor-${i}`).value;
+    const valor = valorRaw ? parseFloat(valorRaw) : null;
+    const moeda = document.getElementById(`ocr-moeda-${i}`).value;
+
+    if (!nome || isNaN(bonus) || isNaN(slots)) continue;
+
+    const { error } = await salvarCandidato(nome, bonus, slots, valor, moeda);
+    if (!error) importados++;
   }
 
-  const linhaNome = linhas.find(l => {
-    const semEspaco = l.replace(/\s/g, '');
-    if (semEspaco.length < 3) return false;
-    if (/^[\d.,%]+$/.test(semEspaco)) return false;
-    if (MOEDAS.some(c => new RegExp('^' + c + '$', 'i').test(semEspaco))) return false;
-    if (/slots?|espaços?|vagas?/i.test(l)) return false;
-    return true;
-  });
-  if (linhaNome) document.getElementById('candidato-nome').value = linhaNome;
+  candidatosExtraidosOcr = [];
+  document.getElementById('preview-ocr-indice').innerHTML = '';
+  showToast(`${importados} rack(s) importado(s) para comparação.`);
+  await loadCandidatos();
 }
 
 /* ---------------- Índice de comparação dos racks candidatos ---------------- */
