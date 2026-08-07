@@ -106,6 +106,7 @@
   .error-msg{color:var(--danger); font-size:13px; margin-top:8px; display:none;}
   .hint{color:var(--muted); font-size:12px; margin-top:10px; text-align:center;}
   .version-tag{color:var(--muted); font-size:10px; text-align:center; opacity:0.5; margin-top:24px; font-family:'JetBrains Mono';}
+  .version-tag-top{color:var(--muted); font-size:10px; opacity:0.6; font-family:'JetBrains Mono'; white-space:nowrap;}
 
   /* ---------- Auth ---------- */
   #auth-screen{
@@ -299,6 +300,7 @@
         <div class="brand-name">LaliCoin</div>
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
+        <span class="version-tag-top" id="version-tag-app"></span>
         <span class="role-pill" id="role-pill">U</span>
         <button class="icon-btn" onclick="handleLogout()" title="Sair">⏻</button>
       </div>
@@ -442,9 +444,21 @@
           📷 Ler imagem do rack (ou de uma lista com vários)
         </button>
         <input type="file" id="indice-imagem-input" accept="image/*" style="display:none;" onchange="lerImagemIndice(event)">
+
+        <button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="toggleColarTextoIndice()">
+          📋 Colar lista de texto (mais confiável que imagem)
+        </button>
+        <div id="colar-texto-indice" style="display:none; margin-top:10px;">
+          <div class="field">
+            <label>Cole aqui a lista copiada do marketplace</label>
+            <textarea id="indice-texto-colado" rows="8" placeholder="Cole aqui o texto selecionado e copiado da página do RollerCoin" style="width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:12px;"></textarea>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="analisarTextoColadoIndice()">Analisar texto</button>
+        </div>
+
         <p class="hint" style="margin-top:8px; margin-bottom:0;">
-          Funciona com print de um rack só ou de uma lista inteira (tipo o marketplace do RollerCoin).
-          Depois de ler, você confere e edita cada um antes de importar — nada é salvo sozinho.
+          Funciona com print de um rack só, de uma lista inteira, ou com o texto copiado direto da
+          página. Depois de ler, você confere e edita cada um antes de importar — nada é salvo sozinho.
         </p>
       </div>
 
@@ -536,8 +550,6 @@
       </div>
       <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
     </section>
-
-    <div class="version-tag" id="version-tag-app"></div>
   </main>
 </div>
 
@@ -547,8 +559,9 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v1';
+const APP_VERSION = 'v3';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
+document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
 /* =========================================================
    CONFIGURAÇÃO DO SUPABASE
@@ -1252,6 +1265,27 @@ async function deleteCandidato(id){
 /* ---------------- Leitura de imagem (OCR) para racks candidatos ---------------- */
 let candidatosExtraidosOcr = [];
 
+function toggleColarTextoIndice(){
+  const box = document.getElementById('colar-texto-indice');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+function analisarTextoColadoIndice(){
+  const texto = document.getElementById('indice-texto-colado').value;
+  if (!texto.trim()){
+    showToast('Cole o texto da lista antes de analisar.');
+    return;
+  }
+  candidatosExtraidosOcr = extrairRacksMultiplos(texto);
+  if (!candidatosExtraidosOcr.length){
+    showToast('Não consegui identificar nenhum rack nesse texto.');
+    mostrarTextoBrutoOcr(texto);
+  } else {
+    showToast(`${candidatosExtraidosOcr.length} rack(s) encontrado(s) — revise antes de importar.`);
+  }
+  renderPreviewOcrIndice();
+}
+
 async function lerImagemIndice(event){
   const file = event.target.files[0];
   if (!file) return;
@@ -1297,8 +1331,14 @@ function mostrarTextoBrutoOcr(texto){
 
 // Extrai vários racks de uma lista tipo marketplace do RollerCoin.
 // Padrão de cada item: "Nome Slots" / "Bônus%" / "Quantidade: N" (ignorado) / "De" / "Preço Moeda"
+// Extrai o texto de uma linha no formato "[rótulo](link)" — se não for esse formato, usa a linha como está
+function extrairLabelDeLinha(linha){
+  const m = linha.match(/^\[(.*)\]\(.*\)$/);
+  return m ? m[1].trim() : linha;
+}
+
 function extrairRacksMultiplos(texto){
-  const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
+  const linhas = texto.split('\n').map(l => extrairLabelDeLinha(l.trim())).filter(Boolean);
   const registros = [];
   let atual = null;
 
