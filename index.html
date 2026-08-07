@@ -105,6 +105,7 @@
 
   .error-msg{color:var(--danger); font-size:13px; margin-top:8px; display:none;}
   .hint{color:var(--muted); font-size:12px; margin-top:10px; text-align:center;}
+  .version-tag{color:var(--muted); font-size:10px; text-align:center; opacity:0.5; margin-top:24px; font-family:'JetBrains Mono';}
 
   /* ---------- Auth ---------- */
   #auth-screen{
@@ -285,6 +286,7 @@
       <div class="error-msg" id="signup-error"></div>
       <p class="hint">Novas contas entram como usuário padrão (U).</p>
     </form>
+    <div class="version-tag" id="version-tag-auth"></div>
   </div>
 </div>
 
@@ -534,12 +536,20 @@
       </div>
       <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
     </section>
+
+    <div class="version-tag" id="version-tag-app"></div>
   </main>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
+/* =========================================================
+   VERSÃO DO APP — aumente esse número a cada atualização
+   ========================================================= */
+const APP_VERSION = 'v1';
+document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
+
 /* =========================================================
    CONFIGURAÇÃO DO SUPABASE
    Substitua pelos dados do seu projeto (Project Settings > API)
