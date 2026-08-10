@@ -586,7 +586,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v7';
+const APP_VERSION = 'v9';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1677,6 +1677,12 @@ function somaCombinacoesAteCapacidade(n, capacidade){
   return total;
 }
 
+// Normaliza o nome do miner pra comparação (ignora maiúsculas/minúsculas e espaços extras),
+// evitando que "Red Silk" e "red silk " sejam tratados como miners diferentes
+function chaveNome(nome){
+  return (nome || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function scoreMiner(m){
   return Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')) * (1 + Number(m.bonus) / 100);
 }
@@ -1696,9 +1702,9 @@ function escolherMelhoresGulosoCapacidade(miners, capacidade, bonusRack){
   for (const m of ordenados){
     const custo = Number(m.slots_ocupados) || 1;
     if (usados + custo > capacidade) continue;
-    if (nomesUsados.has(m.nome)) continue;
+    if (nomesUsados.has(chaveNome(m.nome))) continue;
     escolhidos.push(m);
-    nomesUsados.add(m.nome);
+    nomesUsados.add(chaveNome(m.nome));
     usados += custo;
     if (usados >= capacidade) break;
   }
@@ -1726,7 +1732,7 @@ function melhorComboExato(miners, capacidade, bonusRack){
       const slotsUsados = combo.reduce((s, m) => s + (Number(m.slots_ocupados) || 1), 0);
       if (slotsUsados > capacidade) continue;
 
-      const nomes = combo.map(m => m.nome);
+      const nomes = combo.map(m => chaveNome(m.nome));
       if (new Set(nomes).size !== nomes.length) continue; // miners com mesmo nome não podem ocupar o mesmo rack
 
       const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
@@ -1809,16 +1815,36 @@ function calcularMelhorRack(){
     }
     const r = item.resultado;
     const capacidade = item.rack.slots || 4;
+
+    // monta os blocos de slot: cada miner ocupa 1 ou mais números seguidos, e o que sobrar fica "vazio"
+    let proximoSlot = 1;
+    const blocos = r.combo.map(m => {
+      const ocupa = Number(m.slots_ocupados) || 1;
+      const inicio = proximoSlot;
+      const fim = proximoSlot + ocupa - 1;
+      proximoSlot += ocupa;
+      const rotulo = inicio === fim ? `SLOT ${inicio}` : (fim - inicio === 1 ? `SLOT ${inicio} e ${fim}` : `SLOT ${inicio} a ${fim}`);
+      return { miner: m, rotulo };
+    });
+    const slotsVazios = [];
+    for (let s = proximoSlot; s <= capacidade; s++) slotsVazios.push(s);
+
     return `
       <div class="card">
         <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}% · ${r.slotsUsados}/${capacidade} slots · ${r.combo.length} miner(s)${r.aproximado ? ' <span class="tag-off">Estimativa</span>' : ''}</div>
         <div class="rack">
-          ${r.combo.map((m, i) => `
+          ${blocos.map(b => `
             <div class="slot">
-              <div class="num">SLOT ${i + 1} · ${m.slots_ocupados ?? 1} slot(s)</div>
-              <div class="name">${escapeHtml(m.nome)}</div>
-              <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
-              <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
+              <div class="num">${b.rotulo} · ${b.miner.slots_ocupados ?? 1} slot(s)</div>
+              <div class="name">${escapeHtml(b.miner.nome)}</div>
+              <div class="stat">Poder <b>${fmtNum(b.miner.poder)} ${b.miner.unidade || 'H/s'}</b></div>
+              <div class="stat">Bônus <b>${fmtNum(b.miner.bonus)}%</b></div>
+            </div>
+          `).join('')}
+          ${slotsVazios.map(s => `
+            <div class="slot" style="opacity:0.5;">
+              <div class="num">SLOT ${s}</div>
+              <div class="name" style="color:var(--muted);">Vazio</div>
             </div>
           `).join('')}
         </div>
