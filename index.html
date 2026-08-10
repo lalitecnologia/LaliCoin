@@ -106,7 +106,7 @@
   .error-msg{color:var(--danger); font-size:13px; margin-top:8px; display:none;}
   .hint{color:var(--muted); font-size:12px; margin-top:10px; text-align:center;}
   .version-tag{color:var(--muted); font-size:10px; text-align:center; opacity:0.5; margin-top:24px; font-family:'JetBrains Mono';}
-  .version-tag-top{color:var(--muted); font-size:10px; opacity:0.6; font-family:'JetBrains Mono'; white-space:nowrap;}
+  .version-tag-top{color:var(--gold); font-size:12px; font-weight:700; opacity:0.9; font-family:'JetBrains Mono'; white-space:nowrap;}
 
   /* ---------- Auth ---------- */
   #auth-screen{
@@ -314,13 +314,16 @@
         <span class="ic">▤</span>Rack
       </button>
       <button class="tab-btn" data-screen="indice" onclick="switchScreen('indice')">
-        <span class="ic">⚖</span>Índice
+        <span class="ic">⚖</span>Melhor Rack
       </button>
       <button class="tab-btn" data-screen="calculo" onclick="switchScreen('calculo')">
         <span class="ic">▦</span>Cálculo
       </button>
       <button class="tab-btn" data-screen="custobeneficio" onclick="switchScreen('custobeneficio')">
         <span class="ic">$</span>Custo-Benefício
+      </button>
+      <button class="tab-btn" data-screen="melhorminer" onclick="switchScreen('melhorminer')">
+        <span class="ic">★</span>Melhor Miner
       </button>
       <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
         <span class="ic">◎</span>Perfil
@@ -436,7 +439,7 @@
     <!-- ÍNDICE DE RACKS (candidatos, não são "seus" racks) -->
     <section id="screen-indice" class="screen">
       <div class="card">
-        <div class="section-title">Índice de racks (comparação)</div>
+        <div class="section-title">Melhor Rack (comparação)</div>
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
           Registre aqui racks que você está avaliando comprar, viu de outros jogadores, ou só quer
           comparar — sem misturar com os seus racks reais. O índice usa um poder padrão de
@@ -544,6 +547,25 @@
       <div id="resultado-custobeneficio"></div>
     </section>
 
+    <!-- MELHOR MINER -->
+    <section id="screen-melhorminer" class="screen">
+      <div class="card">
+        <div class="section-title">Melhor miner (comparação rápida)</div>
+        <p style="font-size:13px; color:var(--muted); line-height:1.5;">
+          Cole aqui uma lista de miners copiada do marketplace do RollerCoin. Não salva nada no seu
+          cadastro — é só uma comparação rápida. O valor pago aparece junto, mas não entra no cálculo;
+          a ordenação é só pelo poder já com o bônus aplicado.
+        </p>
+        <div class="field" style="margin-top:14px;">
+          <label>Cole aqui a lista copiada do marketplace</label>
+          <textarea id="melhorminer-texto" rows="8" placeholder="Cole aqui o texto selecionado e copiado da página do RollerCoin" style="width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:12px;"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="calcularMelhorMiner()">Calcular</button>
+      </div>
+
+      <div id="resultado-melhorminer"></div>
+    </section>
+
     <!-- PERFIL -->
     <section id="screen-perfil" class="screen">
       <div class="card">
@@ -564,7 +586,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v4';
+const APP_VERSION = 'v7';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -849,7 +871,18 @@ function renderMiners(){
     list.innerHTML = '<div class="empty-state">Nenhum miner cadastrado ainda.</div>';
     return;
   }
-  list.innerHTML = myMiners.map(m => {
+  const minersOrdenados = [...myMiners].sort((a, b) => {
+    const nomeA = (a.nome || '').toLowerCase();
+    const nomeB = (b.nome || '').toLowerCase();
+    if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
+
+    const poderA = Number(a.poder_hs || paraHs(a.poder, a.unidade || 'H/s'));
+    const poderB = Number(b.poder_hs || paraHs(b.poder, b.unidade || 'H/s'));
+    if (poderA !== poderB) return poderB - poderA;
+
+    return Number(b.bonus) - Number(a.bonus);
+  });
+  list.innerHTML = minersOrdenados.map(m => {
     if (m.id === editingMinerId){
       const opcoesUnidade = Object.keys(UNIDADES_FATOR).map(u =>
         `<option value="${u}" ${u === (m.unidade || 'H/s') ? 'selected' : ''}>${u}</option>`
@@ -1398,6 +1431,106 @@ function extrairRacksMultiplos(texto){
   }
   if (atual && atual.nome) registros.push(atual);
   return registros;
+}
+
+// Normaliza uma unidade escrita de forma livre (ex: "Ph/s", "PH/S") pra uma das chaves conhecidas
+function normalizarUnidade(bruta){
+  if (!bruta) return 'H/s';
+  const chave = Object.keys(UNIDADES_FATOR).find(u => u.toLowerCase() === bruta.toLowerCase());
+  return chave || 'H/s';
+}
+
+// Extrai vários miners de uma lista tipo marketplace do RollerCoin.
+// Padrão de cada item: "Nome" / "Poder Unidade | Bônus%" / "Quantidade: N" (ignorado) / "De" / "Preço Moeda"
+function extrairMinersMultiplos(texto){
+  const linhas = texto.split('\n').map(l => extrairLabelDeLinha(l.trim())).filter(Boolean);
+  const registros = [];
+  let atual = null;
+
+  for (const linha of linhas){
+    if (/^quantidade/i.test(linha)) continue;
+    if (/^de$/i.test(linha)) continue;
+    if (/in\s*collection/i.test(linha)) continue;
+
+    // linha de preço: número + código de moeda conhecido
+    let matchPreco = null;
+    for (const codigo of MOEDAS){
+      const regex = new RegExp('^([\\d.,]+)\\s*' + codigo + '$', 'i');
+      const m = linha.match(regex);
+      if (m){ matchPreco = { valor: parseFloat(m[1].replace(',', '.')), moeda: codigo }; break; }
+    }
+    if (matchPreco && atual){
+      atual.valor = matchPreco.valor;
+      atual.moeda = matchPreco.moeda;
+      continue;
+    }
+
+    // linha de poder + bônus, ex: "7.924 Ph/s | 4.36%"
+    const matchPoderBonus = linha.match(/^([\d.,]+)\s*([a-zA-Z]+\/s)\s*\|\s*([\d.,]+)\s*%$/i);
+    if (matchPoderBonus && atual){
+      atual.poder = parseFloat(matchPoderBonus[1].replace(',', '.'));
+      atual.unidade = normalizarUnidade(matchPoderBonus[2]);
+      atual.bonus = parseFloat(matchPoderBonus[3].replace(',', '.'));
+      continue;
+    }
+
+    // qualquer outra linha (que não seja preço/poder/quantidade/de) é um nome novo
+    if (atual && atual.nome) registros.push(atual);
+    atual = { nome: linha.trim(), poder: null, unidade: 'H/s', bonus: null, valor: null, moeda: 'RST' };
+  }
+  if (atual && atual.nome) registros.push(atual);
+  return registros;
+}
+
+function calcularMelhorMiner(){
+  const texto = document.getElementById('melhorminer-texto').value;
+  const box = document.getElementById('resultado-melhorminer');
+
+  if (!texto.trim()){
+    showToast('Cole a lista de miners antes de calcular.');
+    return;
+  }
+
+  const registros = extrairMinersMultiplos(texto).filter(r => r.poder !== null && r.bonus !== null);
+
+  if (!registros.length){
+    box.innerHTML = `
+      <div class="card">
+        <div class="section-title">Texto bruto lido</div>
+        <p class="hint" style="margin-bottom:10px;">
+          Não consegui identificar nenhum miner nesse texto. Confira se o formato colado é o mesmo
+          copiado da página do RollerCoin, ou me envie esse texto no chat pra eu ajustar a leitura.
+        </p>
+        <textarea readonly style="width:100%; min-height:160px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:11px;">${escapeHtml(texto)}</textarea>
+      </div>
+    `;
+    return;
+  }
+
+  const itens = registros.map(r => {
+    const poderHs = paraHs(r.poder, r.unidade);
+    const score = poderHs * (1 + Number(r.bonus) / 100);
+    return { ...r, poderHs, score };
+  }).sort((a, b) => b.score - a.score);
+
+  box.innerHTML = `
+    <div class="card">
+      <div class="section-title">${itens.length} miner(s) — do melhor pro pior</div>
+      ${itens.map((m, i) => `
+        <div class="cb-row">
+          <div class="cb-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)}</div>
+          <div class="cb-info">
+            <div class="name">${escapeHtml(m.nome)}</div>
+            <div class="stats">${fmtNum(m.poder)} ${m.unidade} · Bônus ${fmtNum(m.bonus)}%${m.valor ? ' · ' + fmtNum(m.valor) + ' ' + (m.moeda || 'RST') + ' (não entra no cálculo)' : ''}</div>
+          </div>
+          <div class="cb-score">
+            <div class="val">${formatarPoder(m.score)}</div>
+            <div class="lbl">poder + bônus</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 function renderPreviewOcrIndice(){
