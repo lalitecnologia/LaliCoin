@@ -238,6 +238,13 @@
     font-size:9px; color:var(--muted); border:1px solid var(--border); border-radius:100px;
     padding:2px 7px; text-transform:uppercase; letter-spacing:0.04em;
   }
+  .counter-badge{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:20px; height:20px; padding:0 6px; margin-left:6px;
+    background:rgba(232,185,62,0.12); border:1px solid var(--gold-dim); border-radius:100px;
+    color:var(--gold); font-family:'JetBrains Mono'; font-size:11px; font-weight:700;
+    vertical-align:middle;
+  }
 
   .cb-row{
     display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);
@@ -330,22 +337,22 @@
 
     <nav class="top-tabs">
       <button class="tab-btn active" data-screen="miners" onclick="switchScreen('miners')">
-        <span class="ic">⛏</span>Miners
+        <span class="ic">⛏</span>Mineradores
+      </button>
+      <button class="tab-btn" data-screen="melhorminer" onclick="switchScreen('melhorminer')">
+        <span class="ic">★</span>Melhor Minerador
       </button>
       <button class="tab-btn" data-screen="rack" onclick="switchScreen('rack')">
-        <span class="ic">▤</span>Rack
+        <span class="ic">▤</span>Racks
       </button>
       <button class="tab-btn" data-screen="indice" onclick="switchScreen('indice')">
         <span class="ic">⚖</span>Melhor Rack
       </button>
       <button class="tab-btn" data-screen="calculo" onclick="switchScreen('calculo')">
-        <span class="ic">▦</span>Cálculo
+        <span class="ic">▦</span>Cálculo Distribuição
       </button>
       <button class="tab-btn" data-screen="custobeneficio" onclick="switchScreen('custobeneficio')">
-        <span class="ic">$</span>Custo-Benefício
-      </button>
-      <button class="tab-btn" data-screen="melhorminer" onclick="switchScreen('melhorminer')">
-        <span class="ic">★</span>Melhor Miner
+        <span class="ic">$</span>Custo Benefício
       </button>
       <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
         <span class="ic">◎</span>Perfil
@@ -357,10 +364,10 @@
     <!-- MINERS -->
     <section id="screen-miners" class="screen active">
       <div class="card">
-        <div class="section-title">Cadastrar miner</div>
+        <div class="section-title">Cadastrar minerador</div>
         <form onsubmit="return handleAddMiner(event)">
           <div class="field">
-            <label>Nome do miner</label>
+            <label>Nome do minerador</label>
             <input type="text" id="miner-nome" required placeholder="Ex: Quantum X7">
           </div>
           <div class="field">
@@ -396,17 +403,17 @@
             </div>
           </div>
           <div class="field">
-            <label class="check-line"><input type="checkbox" id="miner-ativo" checked> Miner ativo</label>
+            <label class="check-line"><input type="checkbox" id="miner-ativo" checked> Minerador ativo</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-rack" checked> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-cb" checked> Considerar no cálculo de custo-benefício</label>
           </div>
-          <button type="submit" class="btn btn-primary">Adicionar miner</button>
+          <button type="submit" class="btn btn-primary">Adicionar minerador</button>
         </form>
       </div>
 
       <div class="card">
-        <div class="section-title">Seus miners</div>
-        <div id="miners-list"><div class="empty-state">Nenhum miner cadastrado ainda.</div></div>
+        <div class="section-title">Seus mineradores <span id="contador-miners" class="counter-badge">0</span></div>
+        <div id="miners-list"><div class="empty-state">Nenhum minerador cadastrado ainda.</div></div>
       </div>
     </section>
 
@@ -453,82 +460,26 @@
       </div>
 
       <div class="card">
-        <div class="section-title">Seus racks</div>
+        <div class="section-title">Seus racks <span id="contador-racks" class="counter-badge">0</span></div>
         <div id="racks-list"><div class="empty-state">Nenhum rack cadastrado ainda.</div></div>
       </div>
     </section>
 
-    <!-- ÍNDICE DE RACKS (candidatos, não são "seus" racks) -->
+    <!-- MELHOR RACK -->
     <section id="screen-indice" class="screen">
       <div class="card">
-        <div class="section-title">Melhor Rack (comparação)</div>
+        <div class="section-title">Melhor Rack (comparação rápida)</div>
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
-          Registre aqui racks que você está avaliando comprar, viu de outros jogadores, ou só quer
-          comparar — sem misturar com os seus racks reais. O índice usa um poder padrão de
-          <b>1 PH/s por slot</b> pra comparar racks de forma justa, independente de quais miners
-          você realmente tem. O valor pago é só informativo, não entra na conta.
+          Cole aqui uma lista de racks copiada do marketplace do RollerCoin. Não salva nada no seu
+          cadastro — é só uma comparação rápida. O índice usa um poder padrão de <b>1 PH/s por slot</b>
+          pra comparar racks de forma justa, independente de quais mineradores você realmente tem.
+          O valor pago aparece junto, mas não entra no cálculo.
         </p>
-
-        <button type="button" class="btn btn-ghost" id="btn-ler-imagem-indice" style="margin-top:14px;" onclick="document.getElementById('indice-imagem-input').click()">
-          📷 Ler imagem do rack (ou de uma lista com vários)
-        </button>
-        <input type="file" id="indice-imagem-input" accept="image/*" style="display:none;" onchange="lerImagemIndice(event)">
-
-        <button type="button" class="btn btn-ghost" style="margin-top:10px;" onclick="toggleColarTextoIndice()">
-          📋 Colar lista de texto (mais confiável que imagem)
-        </button>
-        <div id="colar-texto-indice" style="display:none; margin-top:10px;">
-          <div class="field">
-            <label>Cole aqui a lista copiada do marketplace</label>
-            <textarea id="indice-texto-colado" rows="8" placeholder="Cole aqui o texto selecionado e copiado da página do RollerCoin" style="width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:12px;"></textarea>
-          </div>
-          <button type="button" class="btn btn-primary" onclick="analisarTextoColadoIndice()">Analisar texto</button>
+        <div class="field" style="margin-top:14px;">
+          <label>Cole aqui a lista copiada do marketplace</label>
+          <textarea id="indice-texto" rows="8" placeholder="Cole aqui o texto selecionado e copiado da página do RollerCoin" style="width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:12px;"></textarea>
         </div>
-
-        <p class="hint" style="margin-top:8px; margin-bottom:0;">
-          Funciona com print de um rack só, de uma lista inteira, ou com o texto copiado direto da
-          página. Depois de ler, você confere e edita cada um antes de importar — nada é salvo sozinho.
-        </p>
-      </div>
-
-      <div id="preview-ocr-indice"></div>
-
-      <div class="card">
-        <div class="section-title">Cadastrar manualmente</div>
-
-        <form onsubmit="return handleAddCandidato(event)">
-          <div class="field">
-            <label>Nome do rack</label>
-            <input type="text" id="candidato-nome" required placeholder="Ex: Rack visto no marketplace">
-          </div>
-          <div class="field">
-            <label>Bônus (%)</label>
-            <input type="number" id="candidato-bonus" required step="any" min="0" placeholder="Ex: 8">
-          </div>
-          <div class="field">
-            <label>Número de slots</label>
-            <input type="number" id="candidato-slots" required step="1" min="1" value="4" placeholder="Ex: 4">
-          </div>
-          <div class="field">
-            <label>Valor (informativo)</label>
-            <div class="moeda-field">
-              <input type="number" id="candidato-valor" step="any" min="0" placeholder="Ex: 5000" style="flex:1;">
-              <span class="coin-badge" id="candidato-moeda-badge"></span>
-              <select id="candidato-moeda" onchange="atualizarBadge('candidato-moeda-badge', this.value)" style="flex:1.4;"></select>
-            </div>
-          </div>
-          <button type="submit" class="btn btn-primary">Adicionar / atualizar candidato</button>
-        </form>
-      </div>
-
-      <div class="card">
-        <div class="section-title">Racks candidatos cadastrados</div>
-        <div id="candidatos-list"><div class="empty-state">Nenhum rack candidato cadastrado ainda.</div></div>
-      </div>
-
-      <div class="card">
-        <div class="section-title">Ranking dos candidatos</div>
-        <button class="btn btn-primary" onclick="calcularIndiceRacks()">Calcular ranking</button>
+        <button class="btn btn-primary" onclick="calcularMelhorRackIndice()">Calcular</button>
       </div>
 
       <div id="resultado-indice"></div>
@@ -539,12 +490,12 @@
       <div class="card">
         <div class="section-title">Melhor combinação por rack</div>
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
-          Distribui seus miners ativos entre os racks ativos, respeitando a quantidade de slots de
-          cada rack e quantos slots cada miner ocupa (1, 2 ou mais). Racks com maior bônus têm
-          prioridade e escolhem primeiro os melhores miners disponíveis; um miner só pode ocupar um
-          rack por vez, e miners com o mesmo nome não podem estar juntos no mesmo rack. Para cada
-          rack, o cálculo soma o poder dos miners escolhidos e aplica sobre esse total o bônus dos
-          miners somado ao bônus do próprio rack. Quando há muitos miners e slots, o app pode usar
+          Distribui seus mineradores ativos entre os racks ativos, respeitando a quantidade de slots de
+          cada rack e quantos slots cada minerador ocupa (1, 2 ou mais). Racks com maior bônus têm
+          prioridade e escolhem primeiro os melhores mineradores disponíveis; um minerador só pode ocupar um
+          rack por vez, e mineradores com o mesmo nome não podem estar juntos no mesmo rack. Para cada
+          rack, o cálculo soma o poder dos mineradores escolhidos e aplica sobre esse total o bônus dos
+          mineradores somado ao bônus do próprio rack. Quando há muitos mineradores e slots, o app pode usar
           uma estimativa (marcada como "Estimativa") em vez de testar todas as combinações possíveis,
           para não travar o navegador.
         </p>
@@ -572,9 +523,9 @@
     <!-- MELHOR MINER -->
     <section id="screen-melhorminer" class="screen">
       <div class="card">
-        <div class="section-title">Melhor miner (comparação rápida)</div>
+        <div class="section-title">Melhor minerador (comparação rápida)</div>
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
-          Cole aqui uma lista de miners copiada do marketplace do RollerCoin. Não salva nada no seu
+          Cole aqui uma lista de mineradores copiada do marketplace do RollerCoin. Não salva nada no seu
           cadastro — é só uma comparação rápida. O valor pago aparece junto, mas não entra no cálculo;
           a ordenação é só pelo poder já com o bônus aplicado.
         </p>
@@ -608,7 +559,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v10';
+const APP_VERSION = 'v12';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -625,7 +576,6 @@ let currentUser = null;
 let currentProfile = null;
 let myMiners = [];
 let myRacks = [];
-let myCandidatos = [];
 
 /* ---------------- Unidades de poder ---------------- */
 const UNIDADES_FATOR = {
@@ -712,12 +662,6 @@ function popularSelectsMoeda(){
     selRack.innerHTML = opcoesMoeda('RST');
     selRack.dataset.filled = '1';
     atualizarBadge('rack-moeda-badge', 'RST');
-  }
-  const selCand = document.getElementById('candidato-moeda');
-  if (selCand && !selCand.dataset.filled){
-    selCand.innerHTML = opcoesMoeda('RST');
-    selCand.dataset.filled = '1';
-    atualizarBadge('candidato-moeda-badge', 'RST');
   }
 }
 
@@ -867,7 +811,6 @@ async function onAuthReady(user){
   popularSelectsMoeda();
   await loadMiners();
   await loadRacks();
-  await loadCandidatos();
 }
 
 /* ---------------- Screens / nav ---------------- */
@@ -888,9 +831,12 @@ async function loadMiners(){
 let editingMinerId = null;
 
 function renderMiners(){
+  const contador = document.getElementById('contador-miners');
+  if (contador) contador.textContent = myMiners.length;
+
   const list = document.getElementById('miners-list');
   if (!myMiners.length){
-    list.innerHTML = '<div class="empty-state">Nenhum miner cadastrado ainda.</div>';
+    list.innerHTML = '<div class="empty-state">Nenhum minerador cadastrado ainda.</div>';
     return;
   }
   const minersOrdenados = [...myMiners].sort((a, b) => {
@@ -1034,7 +980,7 @@ async function handleAddMiner(e){
     .from('miners').insert({ user_id: currentUser.id, nome, poder, unidade, poder_hs, bonus, slots_ocupados, valor, moeda, ativo, usar_rack, usar_cb });
 
   if (error){
-    showToast('Erro ao adicionar miner.');
+    showToast('Erro ao adicionar minerador.');
     return false;
   }
   document.getElementById('miner-nome').value = '';
@@ -1049,7 +995,7 @@ async function handleAddMiner(e){
 
 async function deleteMiner(id){
   const { error } = await supabaseClient.from('miners').delete().eq('id', id);
-  if (error){ showToast('Erro ao remover miner.'); return; }
+  if (error){ showToast('Erro ao remover minerador.'); return; }
   showToast('Miner removido.');
   await loadMiners();
 }
@@ -1065,6 +1011,9 @@ async function loadRacks(){
 }
 
 function renderRacks(){
+  const contador = document.getElementById('contador-racks');
+  if (contador) contador.textContent = myRacks.length;
+
   const list = document.getElementById('racks-list');
   if (!myRacks.length){
     list.innerHTML = '<div class="empty-state">Nenhum rack cadastrado ainda.</div>';
@@ -1269,141 +1218,14 @@ async function deleteRack(id){
   await loadRacks();
 }
 
-/* ---------------- Racks candidatos (tabela separada, só para comparação) ---------------- */
-async function loadCandidatos(){
-  const { data, error } = await supabaseClient
-    .from('rack_candidatos').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true });
-  myCandidatos = data || [];
-  renderCandidatos();
-}
-
-function renderCandidatos(){
-  const list = document.getElementById('candidatos-list');
-  if (!myCandidatos.length){
-    list.innerHTML = '<div class="empty-state">Nenhum rack candidato cadastrado ainda.</div>';
-    return;
-  }
-  list.innerHTML = myCandidatos.map(c => `
-    <div class="miner-row">
-      <div class="miner-info">
-        <div class="name">${escapeHtml(c.nome)}</div>
-        <div class="stats">${c.slots} slots · Bônus: ${fmtNum(c.bonus)}%${c.valor ? ' · ' + fmtNum(c.valor) + ' ' + (c.moeda || 'RST') + ' (informativo)' : ''}</div>
-      </div>
-      <div class="miner-actions">
-        <button class="icon-btn" onclick="deleteCandidato('${c.id}')" title="Remover">✕</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function handleAddCandidato(e){
-  e.preventDefault();
-  const nome = document.getElementById('candidato-nome').value.trim();
-  const bonus = parseFloat(document.getElementById('candidato-bonus').value);
-  const slots = parseInt(document.getElementById('candidato-slots').value, 10);
-  const valorRaw = document.getElementById('candidato-valor').value;
-  const valor = valorRaw ? parseFloat(valorRaw) : null;
-  const moeda = document.getElementById('candidato-moeda').value;
-
-  // Como não é um rack seu de verdade, se já existir um candidato com o mesmo nome, atualiza em vez de duplicar
-  const existente = myCandidatos.find(c => c.nome.trim().toLowerCase() === nome.toLowerCase());
-  const { error } = await salvarCandidato(nome, bonus, slots, valor, moeda);
-
-  if (error){
-    showToast('Erro ao salvar candidato.');
-    return false;
-  }
-  document.getElementById('candidato-nome').value = '';
-  document.getElementById('candidato-bonus').value = '';
-  document.getElementById('candidato-slots').value = '4';
-  document.getElementById('candidato-valor').value = '';
-  showToast(existente ? 'Candidato atualizado.' : 'Candidato adicionado.');
-  await loadCandidatos();
-  return false;
-}
-
-async function deleteCandidato(id){
-  const { error } = await supabaseClient.from('rack_candidatos').delete().eq('id', id);
-  if (error){ showToast('Erro ao remover candidato.'); return; }
-  showToast('Candidato removido.');
-  await loadCandidatos();
-}
-
-/* ---------------- Leitura de imagem (OCR) para racks candidatos ---------------- */
-let candidatosExtraidosOcr = [];
-
-function toggleColarTextoIndice(){
-  const box = document.getElementById('colar-texto-indice');
-  box.style.display = box.style.display === 'none' ? 'block' : 'none';
-}
-
-function analisarTextoColadoIndice(){
-  const texto = document.getElementById('indice-texto-colado').value;
-  if (!texto.trim()){
-    showToast('Cole o texto da lista antes de analisar.');
-    return;
-  }
-  candidatosExtraidosOcr = extrairRacksMultiplos(texto);
-  if (!candidatosExtraidosOcr.length){
-    showToast('Não consegui identificar nenhum rack nesse texto.');
-    mostrarTextoBrutoOcr(texto);
-  } else {
-    showToast(`${candidatosExtraidosOcr.length} rack(s) encontrado(s) — revise antes de importar.`);
-  }
-  renderPreviewOcrIndice();
-}
-
-async function lerImagemIndice(event){
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const btn = document.getElementById('btn-ler-imagem-indice');
-  const textoOriginal = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '⏳ Lendo imagem...';
-
-  try {
-    const { data } = await Tesseract.recognize(file, 'por+eng');
-    const texto = data.text || '';
-    candidatosExtraidosOcr = extrairRacksMultiplos(texto);
-    if (!candidatosExtraidosOcr.length){
-      showToast('Não consegui identificar nenhum rack nessa imagem.');
-      mostrarTextoBrutoOcr(texto);
-    } else {
-      showToast(`${candidatosExtraidosOcr.length} rack(s) encontrado(s) — revise antes de importar.`);
-    }
-    renderPreviewOcrIndice();
-  } catch (err){
-    showToast('Não foi possível ler a imagem. Preencha manualmente.');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = textoOriginal;
-    event.target.value = '';
-  }
-}
-
-function mostrarTextoBrutoOcr(texto){
-  const box = document.getElementById('preview-ocr-indice');
-  box.innerHTML = `
-    <div class="card">
-      <div class="section-title">Texto bruto lido da imagem</div>
-      <p class="hint" style="margin-bottom:10px;">
-        Não consegui reconhecer o padrão automaticamente. Copie o texto abaixo e envie pra mim
-        no chat — assim ajusto a leitura pro formato exato que está saindo aqui.
-      </p>
-      <textarea readonly style="width:100%; min-height:180px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:11px;">${escapeHtml(texto)}</textarea>
-    </div>
-  `;
-}
-
-// Extrai vários racks de uma lista tipo marketplace do RollerCoin.
-// Padrão de cada item: "Nome Slots" / "Bônus%" / "Quantidade: N" (ignorado) / "De" / "Preço Moeda"
 // Extrai o texto de uma linha no formato "[rótulo](link)" — se não for esse formato, usa a linha como está
 function extrairLabelDeLinha(linha){
   const m = linha.match(/^\[(.*)\]\(.*\)$/);
   return m ? m[1].trim() : linha;
 }
 
+// Extrai vários racks de uma lista tipo marketplace do RollerCoin.
+// Padrão de cada item: "Nome Slots" / "Bônus%" / "Quantidade: N" (ignorado) / "De" / "Preço Moeda"
 function extrairRacksMultiplos(texto){
   const linhas = texto.split('\n').map(l => extrairLabelDeLinha(l.trim())).filter(Boolean);
   const registros = [];
@@ -1509,7 +1331,7 @@ function calcularMelhorMiner(){
   const box = document.getElementById('resultado-melhorminer');
 
   if (!texto.trim()){
-    showToast('Cole a lista de miners antes de calcular.');
+    showToast('Cole a lista de mineradores antes de calcular.');
     return;
   }
 
@@ -1520,7 +1342,7 @@ function calcularMelhorMiner(){
       <div class="card">
         <div class="section-title">Texto bruto lido</div>
         <p class="hint" style="margin-bottom:10px;">
-          Não consegui identificar nenhum miner nesse texto. Confira se o formato colado é o mesmo
+          Não consegui identificar nenhum minerador nesse texto. Confira se o formato colado é o mesmo
           copiado da página do RollerCoin, ou me envie esse texto no chat pra eu ajustar a leitura.
         </p>
         <textarea readonly style="width:100%; min-height:160px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:11px;">${escapeHtml(texto)}</textarea>
@@ -1537,7 +1359,7 @@ function calcularMelhorMiner(){
 
   box.innerHTML = `
     <div class="card">
-      <div class="section-title">${itens.length} miner(s) — do melhor pro pior</div>
+      <div class="section-title">${itens.length} minerador(es) — do melhor pro pior</div>
       ${itens.map((m, i) => `
         <div class="cb-row">
           <div class="cb-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)}</div>
@@ -1555,110 +1377,51 @@ function calcularMelhorMiner(){
   `;
 }
 
-function renderPreviewOcrIndice(){
-  const box = document.getElementById('preview-ocr-indice');
-  if (!candidatosExtraidosOcr.length){
-    box.innerHTML = '';
-    return;
-  }
-  box.innerHTML = `
-    <div class="card">
-      <div class="section-title">Racks encontrados na imagem — revise antes de importar</div>
-      ${candidatosExtraidosOcr.map((c, i) => `
-        <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
-          <label class="check-line" style="margin-bottom:0;">
-            <input type="checkbox" id="ocr-incluir-${i}" checked> Importar este rack
-          </label>
-          <div class="field" style="margin-bottom:0;">
-            <label>Nome</label>
-            <input type="text" id="ocr-nome-${i}" value="${escapeHtml(c.nome)}">
-          </div>
-          <div style="display:flex; gap:8px;">
-            <div class="field" style="margin-bottom:0; flex:1;">
-              <label>Bônus (%)</label>
-              <input type="number" step="any" min="0" id="ocr-bonus-${i}" value="${c.bonus ?? ''}">
-            </div>
-            <div class="field" style="margin-bottom:0; flex:1;">
-              <label>Slots</label>
-              <input type="number" step="1" min="1" id="ocr-slots-${i}" value="${c.slots ?? 4}">
-            </div>
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Valor (informativo)</label>
-            <div class="moeda-field">
-              <input type="number" step="any" min="0" id="ocr-valor-${i}" value="${c.valor ?? ''}" style="flex:1;">
-              <span class="coin-badge" id="ocr-moeda-badge-${i}"></span>
-              <select id="ocr-moeda-${i}" onchange="atualizarBadge('ocr-moeda-badge-${i}', this.value)" style="flex:1.4;">${opcoesMoeda(c.moeda || 'RST')}</select>
-            </div>
-          </div>
-        </div>
-      `).join('')}
-      <button class="btn btn-primary" style="margin-top:8px;" onclick="importarCandidatosOcr()">Importar selecionados</button>
-    </div>
-  `;
-  candidatosExtraidosOcr.forEach((c, i) => atualizarBadge(`ocr-moeda-badge-${i}`, c.moeda || 'RST'));
-}
-
-async function salvarCandidato(nome, bonus, slots, valor, moeda){
-  const existente = myCandidatos.find(c => c.nome.trim().toLowerCase() === nome.trim().toLowerCase());
-  if (existente){
-    return supabaseClient.from('rack_candidatos').update({ bonus, slots, valor, moeda }).eq('id', existente.id);
-  }
-  return supabaseClient.from('rack_candidatos').insert({ user_id: currentUser.id, nome, bonus, slots, valor, moeda });
-}
-
-async function importarCandidatosOcr(){
-  let importados = 0;
-  for (let i = 0; i < candidatosExtraidosOcr.length; i++){
-    const incluir = document.getElementById(`ocr-incluir-${i}`)?.checked;
-    if (!incluir) continue;
-
-    const nome = document.getElementById(`ocr-nome-${i}`).value.trim();
-    const bonus = parseFloat(document.getElementById(`ocr-bonus-${i}`).value);
-    const slots = parseInt(document.getElementById(`ocr-slots-${i}`).value, 10);
-    const valorRaw = document.getElementById(`ocr-valor-${i}`).value;
-    const valor = valorRaw ? parseFloat(valorRaw) : null;
-    const moeda = document.getElementById(`ocr-moeda-${i}`).value;
-
-    if (!nome || isNaN(bonus) || isNaN(slots)) continue;
-
-    const { error } = await salvarCandidato(nome, bonus, slots, valor, moeda);
-    if (!error) importados++;
-  }
-
-  candidatosExtraidosOcr = [];
-  document.getElementById('preview-ocr-indice').innerHTML = '';
-  showToast(`${importados} rack(s) importado(s) para comparação.`);
-  await loadCandidatos();
-}
-
-/* ---------------- Índice de comparação dos racks candidatos ---------------- */
-function calcularIndiceRacks(){
+/* ---------------- Melhor Rack (comparação rápida, sem persistência) ---------------- */
+function calcularMelhorRackIndice(){
+  const texto = document.getElementById('indice-texto').value;
   const box = document.getElementById('resultado-indice');
 
-  if (!myCandidatos.length){
-    box.innerHTML = `<div class="card"><div class="empty-state">Cadastre pelo menos um rack candidato acima.</div></div>`;
+  if (!texto.trim()){
+    showToast('Cole a lista de racks antes de calcular.');
+    return;
+  }
+
+  const registros = extrairRacksMultiplos(texto).filter(r => r.bonus !== null && r.slots);
+
+  if (!registros.length){
+    box.innerHTML = `
+      <div class="card">
+        <div class="section-title">Texto bruto lido</div>
+        <p class="hint" style="margin-bottom:10px;">
+          Não consegui identificar nenhum rack nesse texto. Confira se o formato colado é o mesmo
+          copiado da página do RollerCoin, ou me envie esse texto no chat pra eu ajustar a leitura.
+        </p>
+        <textarea readonly style="width:100%; min-height:160px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:10px; font-family:'JetBrains Mono'; font-size:11px;">${escapeHtml(texto)}</textarea>
+      </div>
+    `;
     return;
   }
 
   const poderPadraoPorSlot = paraHs(1, 'PH/s'); // referência: 1 PH/s por slot
 
-  const itens = myCandidatos.map(c => {
-    const indice = c.slots * poderPadraoPorSlot * (1 + Number(c.bonus) / 100);
-    return { ...c, indice };
+  const itens = registros.map(r => {
+    const indice = r.slots * poderPadraoPorSlot * (1 + Number(r.bonus) / 100);
+    return { ...r, indice };
   }).sort((a, b) => b.indice - a.indice);
 
   box.innerHTML = `
     <div class="card">
-      ${itens.map((c, i) => `
+      <div class="section-title">${itens.length} rack(s) — do melhor pro pior</div>
+      ${itens.map((r, i) => `
         <div class="cb-row">
           <div class="cb-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)}</div>
           <div class="cb-info">
-            <div class="name">${escapeHtml(c.nome)}</div>
-            <div class="stats">${c.slots} slots · Bônus ${fmtNum(c.bonus)}%${c.valor ? ' · ' + fmtNum(c.valor) + ' ' + (c.moeda || 'RST') + ' (não entra na conta)' : ''}</div>
+            <div class="name">${escapeHtml(r.nome)}</div>
+            <div class="stats">${r.slots} slots · Bônus ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') + ' (não entra no cálculo)' : ''}</div>
           </div>
           <div class="cb-score">
-            <div class="val">${formatarPoder(c.indice)}</div>
+            <div class="val">${formatarPoder(r.indice)}</div>
             <div class="lbl">índice</div>
           </div>
         </div>
@@ -1666,6 +1429,7 @@ function calcularIndiceRacks(){
     </div>
   `;
 }
+
 
 /* ---------------- Cálculo do melhor rack ---------------- */
 function combinacoes(arr, k){
@@ -1869,7 +1633,7 @@ function calcularMelhorRack(){
 
     return `
       <div class="card">
-        <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}% · ${r.slotsUsados}/${capacidade} slots · ${r.combo.length} miner(s)${r.aproximado ? ' <span class="tag-off">Estimativa</span>' : ''}</div>
+        <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} · Bônus do rack ${fmtNum(item.rack.bonus)}% · ${r.slotsUsados}/${capacidade} slots · ${r.combo.length} minerador(es)${r.aproximado ? ' <span class="tag-off">Estimativa</span>' : ''}</div>
         <div class="estante">
           ${prateleiras.map((p, i) => `
             <div class="prateleira">
@@ -1919,7 +1683,7 @@ function calcularCustoBeneficio(){
 
   const comValor = myMiners.filter(m => m.valor && m.valor > 0 && m.usar_cb !== false && m.ativo !== false);
   if (!comValor.length){
-    box.innerHTML = `<div class="card"><div class="empty-state">Nenhum miner elegível com valor pago cadastrado. Confira o campo "Valor pago" e a opção "Considerar no cálculo de custo-benefício".</div></div>`;
+    box.innerHTML = `<div class="card"><div class="empty-state">Nenhum minerador elegível com valor pago cadastrado. Confira o campo "Valor pago" e a opção "Considerar no cálculo de custo-benefício".</div></div>`;
     return;
   }
 
