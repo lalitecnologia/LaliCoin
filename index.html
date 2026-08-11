@@ -542,11 +542,35 @@
     <!-- PERFIL -->
     <section id="screen-perfil" class="screen">
       <div class="card">
-        <div class="section-title">Perfil</div>
-        <div class="field"><label>Nome</label><div id="perfil-nome" style="font-size:14px;">—</div></div>
-        <div class="field"><label>CPF</label><div id="perfil-cpf" style="font-size:14px;">—</div></div>
-        <div class="field"><label>E-mail</label><div id="perfil-email" style="font-size:14px;">—</div></div>
-        <div class="field"><label>Tipo de conta</label><div id="perfil-tipo" style="font-size:14px;">—</div></div>
+        <div class="section-title">Editar perfil</div>
+        <form onsubmit="return handleSalvarPerfil(event)">
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="perfil-nome" placeholder="Seu nome">
+          </div>
+          <div class="field">
+            <label>CPF</label>
+            <div id="perfil-cpf" style="font-size:14px; color:var(--muted); padding:11px 0;">—</div>
+          </div>
+          <div class="field">
+            <label>E-mail</label>
+            <input type="email" id="perfil-email" placeholder="voce@email.com">
+          </div>
+          <div class="field" id="perfil-tipo-campo" style="display:none;">
+            <label>Tipo de conta</label>
+            <select id="perfil-tipo">
+              <option value="U">Usuário (U)</option>
+              <option value="C">Criador (C)</option>
+            </select>
+          </div>
+          <div class="field" id="perfil-tipo-somente-leitura">
+            <label>Tipo de conta</label>
+            <div id="perfil-tipo-texto" style="font-size:14px; color:var(--muted); padding:11px 0;">—</div>
+          </div>
+          <button type="submit" class="btn btn-primary">Salvar alterações</button>
+          <div class="error-msg" id="perfil-error"></div>
+          <p class="hint" id="perfil-hint" style="display:none;">Se você trocar o e-mail, pode ser necessário confirmar a mudança pelo link enviado para as caixas de entrada antiga e/ou nova.</p>
+        </form>
       </div>
       <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
     </section>
@@ -559,7 +583,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -770,6 +794,50 @@ async function handleSignup(e){
   return false;
 }
 
+/* ---------------- Salvar perfil ---------------- */
+async function handleSalvarPerfil(e){
+  e.preventDefault();
+  const errEl = document.getElementById('perfil-error');
+  const hintEl = document.getElementById('perfil-hint');
+  errEl.style.display = 'none';
+  hintEl.style.display = 'none';
+
+  const nome = document.getElementById('perfil-nome').value.trim();
+  const emailNovo = document.getElementById('perfil-email').value.trim();
+  const emailMudou = emailNovo && emailNovo !== currentUser.email;
+  const isCreator = currentProfile?.tipo === 'C';
+  const tipoNovo = isCreator ? document.getElementById('perfil-tipo').value : currentProfile?.tipo;
+
+  // atualiza nome (e tipo, só se for o próprio Criador alterando) na tabela profiles
+  const { error: errPerfil } = await supabaseClient
+    .from('profiles').update({ nome, tipo: tipoNovo }).eq('id', currentUser.id);
+
+  if (errPerfil){
+    errEl.textContent = 'Erro ao salvar o perfil: ' + errPerfil.message;
+    errEl.style.display = 'block';
+    return false;
+  }
+
+  // e-mail é alterado separadamente, via autenticação (pode exigir confirmação por link)
+  if (emailMudou){
+    const { error: errEmail } = await supabaseClient.auth.updateUser({ email: emailNovo });
+    if (errEmail){
+      errEl.textContent = 'Nome salvo, mas houve erro ao trocar o e-mail: ' + errEmail.message;
+      errEl.style.display = 'block';
+      return false;
+    }
+    hintEl.style.display = 'block';
+  }
+
+  currentProfile = { ...currentProfile, nome, tipo: tipoNovo };
+  const pill = document.getElementById('role-pill');
+  pill.textContent = tipoNovo === 'C' ? 'Criador' : 'Usuário';
+  pill.classList.toggle('creator', tipoNovo === 'C');
+
+  showToast(emailMudou ? 'Perfil salvo — confirme a troca de e-mail na caixa de entrada.' : 'Perfil atualizado.');
+  return false;
+}
+
 /* ---------------- Logout ---------------- */
 async function handleLogout(){
   await supabaseClient.auth.signOut();
@@ -803,10 +871,18 @@ async function onAuthReady(user){
   pill.textContent = isCreator ? 'Criador' : 'Usuário';
   pill.classList.toggle('creator', isCreator);
 
-  document.getElementById('perfil-nome').textContent = profile?.nome || '—';
-  document.getElementById('perfil-email').textContent = user.email;
+  document.getElementById('perfil-nome').value = profile?.nome || '';
+  document.getElementById('perfil-email').value = user.email || '';
   document.getElementById('perfil-cpf').textContent = formatarCpf(profile?.cpf) || '—';
-  document.getElementById('perfil-tipo').textContent = isCreator ? 'Criador (C)' : 'Usuário (U)';
+
+  // só o próprio Criador pode alterar o tipo de conta (evita autopromoção por usuário comum)
+  document.getElementById('perfil-tipo-campo').style.display = isCreator ? 'block' : 'none';
+  document.getElementById('perfil-tipo-somente-leitura').style.display = isCreator ? 'none' : 'block';
+  if (isCreator){
+    document.getElementById('perfil-tipo').value = profile?.tipo || 'U';
+  } else {
+    document.getElementById('perfil-tipo-texto').textContent = 'Usuário (U)';
+  }
 
   popularSelectsMoeda();
   await loadMiners();
