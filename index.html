@@ -132,7 +132,7 @@
   }
   .miner-row:last-child{border-bottom:none;}
   .miner-info .name{font-weight:600; font-size:14px;}
-  .miner-info .stats{font-size:12px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:2px;}
+  .miner-info .stats{font-size:12.5px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:3px; letter-spacing:0.02em; font-variant-numeric:slashed-zero;}
   .miner-actions{display:flex; gap:8px;}
   .icon-btn{
     width:30px; height:30px; border-radius:8px; border:1px solid var(--border);
@@ -255,7 +255,7 @@
   }
   .cb-info{flex:1; min-width:0;}
   .cb-info .name{font-weight:600; font-size:14px;}
-  .cb-info .stats{font-size:11px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:2px;}
+  .cb-info .stats{font-size:12.5px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:3px; letter-spacing:0.02em; font-variant-numeric:slashed-zero;}
   .cb-score{text-align:right; flex-shrink:0;}
   .cb-score .val{font-family:'JetBrains Mono'; font-weight:700; color:var(--teal); font-size:15px; letter-spacing:0.02em; font-variant-numeric:slashed-zero;}
   .cb-score .lbl{font-size:9px; color:var(--muted); text-transform:uppercase;}
@@ -337,13 +337,13 @@
 
     <nav class="top-tabs">
       <button class="tab-btn active" data-screen="miners" onclick="switchScreen('miners')">
-        <span class="ic">⛏</span>Mineradores
-      </button>
-      <button class="tab-btn" data-screen="melhorminer" onclick="switchScreen('melhorminer')">
-        <span class="ic">★</span>Melhor Minerador
+        <span class="ic">⛏</span>Miners
       </button>
       <button class="tab-btn" data-screen="rack" onclick="switchScreen('rack')">
         <span class="ic">▤</span>Racks
+      </button>
+      <button class="tab-btn" data-screen="melhorminer" onclick="switchScreen('melhorminer')">
+        <span class="ic">★</span>Melhor Miner
       </button>
       <button class="tab-btn" data-screen="indice" onclick="switchScreen('indice')">
         <span class="ic">⚖</span>Melhor Rack
@@ -352,7 +352,7 @@
         <span class="ic">▦</span>Cálculo Distribuição
       </button>
       <button class="tab-btn" data-screen="custobeneficio" onclick="switchScreen('custobeneficio')">
-        <span class="ic">$</span>Custo Benefício
+        <span class="ic">$</span>Cálculo Benefício
       </button>
       <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
         <span class="ic">◎</span>Perfil
@@ -559,7 +559,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v15';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -659,9 +659,9 @@ function popularSelectsMoeda(){
   }
   const selRack = document.getElementById('rack-moeda');
   if (selRack && !selRack.dataset.filled){
-    selRack.innerHTML = opcoesMoeda('RST');
+    selRack.innerHTML = opcoesMoeda('RLT');
     selRack.dataset.filled = '1';
-    atualizarBadge('rack-moeda-badge', 'RST');
+    atualizarBadge('rack-moeda-badge', 'RLT');
   }
 }
 
@@ -1058,7 +1058,7 @@ function renderRacks(){
     return `
     <div class="miner-row">
       <div class="miner-info">
-        <div class="name">${escapeHtml(r.nome)} ${tagOff}</div>
+        <div class="name">${escapeHtml(r.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots ?? 4} slots</span> ${tagOff}</div>
         <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') : ''}</div>
       </div>
       <div class="miner-actions">
@@ -1268,7 +1268,7 @@ function extrairRacksMultiplos(texto){
         slots: parseInt(matchNomeSlots[2], 10),
         bonus: null,
         valor: null,
-        moeda: 'RST'
+        moeda: 'RLT'
       };
       continue;
     }
@@ -1417,7 +1417,7 @@ function calcularMelhorRackIndice(){
         <div class="cb-row">
           <div class="cb-rank">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)}</div>
           <div class="cb-info">
-            <div class="name">${escapeHtml(r.nome)}</div>
+            <div class="name">${escapeHtml(r.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots} slots</span></div>
             <div class="stats">${r.slots} slots · Bônus ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') + ' (não entra no cálculo)' : ''}</div>
           </div>
           <div class="cb-score">
@@ -1602,10 +1602,14 @@ function calcularMelhorRack(){
     const r = item.resultado;
     const capacidade = item.rack.slots || 4;
 
+    // ordena do mais potente pro mais fraco (poder com bônus aplicado), pra quem estiver
+    // no topo da estante ser sempre o minerador mais forte daquele rack
+    const comboOrdenado = [...r.combo].sort((a, b) => scoreMiner(b) - scoreMiner(a));
+
     // monta as prateleiras (cada uma com 2 slots): miners de 2 slots ocupam a prateleira inteira
     // e nunca "atravessam" pra prateleira seguinte; miners de 1 slot dividem prateleira aos pares
-    const filaDoisSlots = r.combo.filter(m => (Number(m.slots_ocupados) || 1) >= 2);
-    const filaUmSlot = [...r.combo.filter(m => (Number(m.slots_ocupados) || 1) === 1)];
+    const filaDoisSlots = comboOrdenado.filter(m => (Number(m.slots_ocupados) || 1) >= 2);
+    const filaUmSlot = [...comboOrdenado.filter(m => (Number(m.slots_ocupados) || 1) === 1)];
 
     const prateleiras = [];
     for (let inicio = 1; inicio <= capacidade; inicio += 2){
