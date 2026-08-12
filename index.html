@@ -550,7 +550,7 @@
           </div>
           <div class="field">
             <label>CPF</label>
-            <div id="perfil-cpf" style="font-size:14px; color:var(--muted); padding:11px 0;">—</div>
+            <input type="text" id="perfil-cpf" placeholder="000.000.000-00" maxlength="14" inputmode="numeric" oninput="mascaraCpf(this)">
           </div>
           <div class="field">
             <label>E-mail</label>
@@ -583,7 +583,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -803,14 +803,22 @@ async function handleSalvarPerfil(e){
   hintEl.style.display = 'none';
 
   const nome = document.getElementById('perfil-nome').value.trim();
+  const cpfFormatado = document.getElementById('perfil-cpf').value.trim();
+  const cpf = cpfFormatado.replace(/\D/g, '');
   const emailNovo = document.getElementById('perfil-email').value.trim();
   const emailMudou = emailNovo && emailNovo !== currentUser.email;
   const isCreator = currentProfile?.tipo === 'C';
   const tipoNovo = isCreator ? document.getElementById('perfil-tipo').value : currentProfile?.tipo;
 
-  // atualiza nome (e tipo, só se for o próprio Criador alterando) na tabela profiles
+  if (cpf && !validarCpf(cpf)){
+    errEl.textContent = 'CPF inválido. Confira os números digitados.';
+    errEl.style.display = 'block';
+    return false;
+  }
+
+  // atualiza nome, cpf (e tipo, só se for o próprio Criador alterando) na tabela profiles
   const { error: errPerfil } = await supabaseClient
-    .from('profiles').update({ nome, tipo: tipoNovo }).eq('id', currentUser.id);
+    .from('profiles').update({ nome, cpf: cpf || null, tipo: tipoNovo }).eq('id', currentUser.id);
 
   if (errPerfil){
     errEl.textContent = 'Erro ao salvar o perfil: ' + errPerfil.message;
@@ -829,7 +837,8 @@ async function handleSalvarPerfil(e){
     hintEl.style.display = 'block';
   }
 
-  currentProfile = { ...currentProfile, nome, tipo: tipoNovo };
+  currentProfile = { ...currentProfile, nome, cpf, tipo: tipoNovo };
+  document.getElementById('perfil-cpf').value = formatarCpf(cpf) || '';
   const pill = document.getElementById('role-pill');
   pill.textContent = tipoNovo === 'C' ? 'Criador' : 'Usuário';
   pill.classList.toggle('creator', tipoNovo === 'C');
@@ -873,7 +882,7 @@ async function onAuthReady(user){
 
   document.getElementById('perfil-nome').value = profile?.nome || '';
   document.getElementById('perfil-email').value = user.email || '';
-  document.getElementById('perfil-cpf').textContent = formatarCpf(profile?.cpf) || '—';
+  document.getElementById('perfil-cpf').value = formatarCpf(profile?.cpf) || '';
 
   // só o próprio Criador pode alterar o tipo de conta (evita autopromoção por usuário comum)
   document.getElementById('perfil-tipo-campo').style.display = isCreator ? 'block' : 'none';
