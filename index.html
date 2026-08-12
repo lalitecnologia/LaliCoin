@@ -583,7 +583,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v19';
+const APP_VERSION = 'v20';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1710,11 +1710,7 @@ function calcularMelhorRack(){
       }
     }
 
-    const poderPorSlot = (m) => {
-      const poderHs = Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s'));
-      const slots = Number(m.slots_ocupados) || 1;
-      return formatarPoder(poderHs / slots);
-    };
+    const poderComBonus = (m) => formatarPoder(scoreMiner(m));
 
     const celulaMiner = (m, numSlot) => `
       <div class="slot-cell">
@@ -1722,7 +1718,7 @@ function calcularMelhorRack(){
         <div class="name">${escapeHtml(m.nome)}</div>
         <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
         <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
-        <div class="stat">Poder/slot <b>${poderPorSlot(m)}</b></div>
+        <div class="stat">Poder + bônus <b>${poderComBonus(m)}</b></div>
       </div>`;
     const celulaVazia = (numSlot) => `
       <div class="slot-cell vazio">SLOT ${numSlot} · vazio</div>`;
@@ -1740,7 +1736,7 @@ function calcularMelhorRack(){
                   <div class="name">${escapeHtml(p.a.nome)}</div>
                   <div class="stat">Poder <b>${fmtNum(p.a.poder)} ${p.a.unidade || 'H/s'}</b></div>
                   <div class="stat">Bônus <b>${fmtNum(p.a.bonus)}%</b></div>
-                  <div class="stat">Poder/slot <b>${poderPorSlot(p.a)}</b></div>
+                  <div class="stat">Poder + bônus <b>${poderComBonus(p.a)}</b></div>
                 </div>
               ` : p.tipo === 'dupla' ? `
                 ${celulaMiner(p.a, p.inicio)}
