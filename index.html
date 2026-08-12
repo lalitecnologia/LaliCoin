@@ -583,7 +583,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1767,7 +1767,38 @@ function calcularMelhorRack(){
         </div>
       </div>
     `;
-  }).join('');
+  }).join('') + renderMinersSobrando(poolMiners);
+}
+
+// Lista, ao final do resultado, os miners que não couberam em nenhum rack (sem slot disponível)
+function renderMinersSobrando(poolMiners){
+  if (!poolMiners.length) return '';
+
+  const ordenados = [...poolMiners].sort((a, b) => scoreMiner(b) - scoreMiner(a));
+
+  return `
+    <div class="card">
+      <div class="cb-group-title" style="margin-top:0;">Sem rack disponível <span class="tag-off">${ordenados.length} minerador(es)</span></div>
+      <p class="hint" style="margin-bottom:10px; text-align:left;">
+        Estes mineradores ficaram de fora porque não sobrou slot em nenhum rack ativo. Aparecem do
+        maior pro menor poder (com bônus aplicado) — os últimos da lista são os que menos fariam
+        diferença se você precisar liberar espaço ou comprar mais um rack.
+      </p>
+      ${ordenados.map((m, i) => `
+        <div class="cb-row">
+          <div class="cb-rank">${i + 1}</div>
+          <div class="cb-info">
+            <div class="name">${escapeHtml(m.nome)}</div>
+            <div class="stats">${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)</div>
+          </div>
+          <div class="cb-score">
+            <div class="val">${formatarPoder(scoreMiner(m))}</div>
+            <div class="lbl">poder + bônus</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 /* ---------------- Custo-benefício ---------------- */
