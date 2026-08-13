@@ -583,7 +583,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v22';
+const APP_VERSION = 'v23';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -617,6 +617,12 @@ const UNIDADES_FATOR = {
 function paraHs(poder, unidade){
   const fator = UNIDADES_FATOR[unidade] || 1;
   return Number(poder) * fator;
+}
+
+// Sempre recalcula o poder em H/s na hora, a partir de poder+unidade — nunca confia no
+// campo poder_hs salvo no banco, que pode ter ficado desatualizado em cadastros antigos
+function poderHsAtual(m){
+  return paraHs(m.poder, m.unidade || 'H/s');
 }
 
 // Formata um valor em H/s de volta para a unidade mais legível (uso genérico)
@@ -929,8 +935,8 @@ function renderMiners(){
     const nomeB = (b.nome || '').toLowerCase();
     if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
 
-    const poderA = Number(a.poder_hs || paraHs(a.poder, a.unidade || 'H/s'));
-    const poderB = Number(b.poder_hs || paraHs(b.poder, b.unidade || 'H/s'));
+    const poderA = poderHsAtual(a);
+    const poderB = poderHsAtual(b);
     if (poderA !== poderB) return poderB - poderA;
 
     return Number(b.bonus) - Number(a.bonus);
@@ -1555,7 +1561,7 @@ function chaveNome(nome){
 }
 
 function scoreMiner(m){
-  return Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')) * (1 + Number(m.bonus) / 100);
+  return poderHsAtual(m) * (1 + Number(m.bonus) / 100);
 }
 
 // Escolhe miners por um método guloso (aproximado) respeitando a capacidade de slots do rack —
@@ -1581,7 +1587,7 @@ function escolherMelhoresGulosoCapacidade(miners, capacidade, bonusRack){
   }
   if (!escolhidos.length) return null;
 
-  const poderTotal = escolhidos.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
+  const poderTotal = escolhidos.reduce((s, m) => s + poderHsAtual(m), 0);
   const bonusMinersTotal = escolhidos.reduce((s, m) => s + Number(m.bonus), 0);
   const bonusTotal = bonusMinersTotal + Number(bonusRack);
   const valorFinal = poderTotal * (1 + bonusTotal / 100);
@@ -1606,7 +1612,7 @@ function melhorComboExato(miners, capacidade, bonusRack){
       const nomes = combo.map(m => chaveNome(m.nome));
       if (new Set(nomes).size !== nomes.length) continue; // miners com mesmo nome não podem ocupar o mesmo rack
 
-      const poderTotal = combo.reduce((s, m) => s + Number(m.poder_hs || paraHs(m.poder, m.unidade || 'H/s')), 0);
+      const poderTotal = combo.reduce((s, m) => s + poderHsAtual(m), 0);
       const bonusMinersTotal = combo.reduce((s, m) => s + Number(m.bonus), 0);
       const bonusTotal = bonusMinersTotal + Number(bonusRack);
       const valorFinal = poderTotal * (1 + bonusTotal / 100);
@@ -1811,7 +1817,7 @@ function calcularCustoBeneficio(){
 
   // calcula o score de cada miner: poder (com bônus aplicado) por unidade de moeda gasta
   const itens = comValor.map(m => {
-    const poderHs = m.poder_hs || paraHs(m.poder, m.unidade || 'H/s');
+    const poderHs = poderHsAtual(m);
     const poderComBonus = poderHs * (1 + Number(m.bonus) / 100);
     const score = poderComBonus / Number(m.valor);
     return { ...m, poderHs, poderComBonus, score };
