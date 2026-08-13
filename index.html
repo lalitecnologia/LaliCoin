@@ -583,7 +583,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v23';
+const APP_VERSION = 'v24';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1673,7 +1673,19 @@ function calcularMelhorRack(){
     resultadosPorRack.push({ rack, resultado: escolhido });
   }
 
-  box.innerHTML = resultadosPorRack.map(item => {
+  const resumoPrioridade = `
+    <div class="card">
+      <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
+      ${racksAtivos.map((r, i) => `
+        <div class="alt-item">
+          <div class="names">${i + 1}. ${escapeHtml(r.nome)} (${r.slots || 4} slots)</div>
+          <div class="score">${fmtNum(r.bonus)}%</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  box.innerHTML = resumoPrioridade + resultadosPorRack.map(item => {
     if (item.insuficiente){
       return `
         <div class="card">
