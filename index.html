@@ -602,7 +602,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v25';
+const APP_VERSION = 'v26';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -683,6 +683,18 @@ function paraHs(poder, unidade){
 // campo poder_hs salvo no banco, que pode ter ficado desatualizado em cadastros antigos
 function poderHsAtual(m){
   return paraHs(m.poder, m.unidade || 'H/s');
+}
+
+// Normaliza o nome do miner pra comparação (ignora maiúsculas/minúsculas e espaços extras),
+// evitando que "Red Silk" e "red silk " sejam tratados como miners diferentes
+function chaveNome(nome){
+  return (nome || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Poder do miner já com o bônus individual aplicado — critério usado para ordenar
+// os miners do mais forte pro mais fraco em todo o app
+function scoreMiner(m){
+  return poderHsAtual(m) * (1 + Number(m.bonus) / 100);
 }
 
 // Formata um valor em H/s de volta para a unidade mais legível (uso genérico)
