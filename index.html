@@ -143,7 +143,7 @@
   }
   .miner-info-text{min-width:0;}
   .miner-info .name{font-weight:600; font-size:14px;}
-  .miner-info .stats{font-size:12.5px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:3px; letter-spacing:0.02em; font-variant-numeric:slashed-zero;}
+  .miner-info .stats{font-size:13.5px; color:var(--text); opacity:0.75; font-family:'Consolas','JetBrains Mono',monospace; margin-top:4px; letter-spacing:0.03em; font-variant-numeric:slashed-zero tabular-nums;}
   .miner-actions{display:flex; gap:8px; flex-shrink:0;}
   .icon-btn{
     width:30px; height:30px; border-radius:8px; border:1px solid var(--border);
@@ -176,7 +176,7 @@
   .slot-cell.vazio::before{ background:var(--border); }
   .slot-cell .num{font-size:10px; color:var(--muted); font-family:'JetBrains Mono';}
   .slot-cell .name{font-weight:600; font-size:13px; margin:3px 0 5px;}
-  .slot-cell .stat{font-size:11px; color:var(--muted); font-family:'JetBrains Mono';}
+  .slot-cell .stat{font-size:12px; color:var(--text); opacity:0.75; font-family:'Consolas','JetBrains Mono',monospace; letter-spacing:0.02em; font-variant-numeric:slashed-zero tabular-nums;}
   .slot-cell .stat b{color:var(--teal);}
   .slot{
     background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
@@ -266,7 +266,7 @@
   }
   .cb-info{flex:1; min-width:0;}
   .cb-info .name{font-weight:600; font-size:14px;}
-  .cb-info .stats{font-size:12.5px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:3px; letter-spacing:0.02em; font-variant-numeric:slashed-zero;}
+  .cb-info .stats{font-size:13.5px; color:var(--text); opacity:0.75; font-family:'Consolas','JetBrains Mono',monospace; margin-top:4px; letter-spacing:0.03em; font-variant-numeric:slashed-zero tabular-nums;}
   .cb-score{text-align:right; flex-shrink:0;}
   .cb-score .val{font-family:'JetBrains Mono'; font-weight:700; color:var(--teal); font-size:15px; letter-spacing:0.02em; font-variant-numeric:slashed-zero;}
   .cb-score .lbl{font-size:9px; color:var(--muted); text-transform:uppercase;}
@@ -602,7 +602,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v26';
+const APP_VERSION = 'v29';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -755,9 +755,9 @@ function atualizarBadge(elId, codigo){
 function popularSelectsMoeda(){
   const selCadastro = document.getElementById('miner-moeda');
   if (selCadastro && !selCadastro.dataset.filled){
-    selCadastro.innerHTML = opcoesMoeda('RST');
+    selCadastro.innerHTML = opcoesMoeda('RLT');
     selCadastro.dataset.filled = '1';
-    atualizarBadge('miner-moeda-badge', 'RST');
+    atualizarBadge('miner-moeda-badge', 'RLT');
   }
   const selRack = document.getElementById('rack-moeda');
   if (selRack && !selRack.dataset.filled){
@@ -1083,6 +1083,7 @@ function renderMiners(){
         </div>
       </div>
       <div class="miner-actions">
+        <button class="icon-btn" onclick="duplicarMiner('${m.id}')" title="Duplicar">⧉</button>
         <button class="icon-btn" onclick="startMinerEdit('${m.id}')" title="Editar">✎</button>
         <button class="icon-btn" onclick="deleteMiner('${m.id}')" title="Remover">✕</button>
       </div>
@@ -1179,6 +1180,31 @@ async function deleteMiner(id){
   await loadMiners();
 }
 
+async function duplicarMiner(id){
+  const original = myMiners.find(m => m.id === id);
+  if (!original) return;
+
+  const { error } = await supabaseClient.from('miners').insert({
+    user_id: currentUser.id,
+    nome: original.nome + ' (cópia)',
+    foto: original.foto || null,
+    poder: original.poder,
+    unidade: original.unidade || 'H/s',
+    poder_hs: original.poder_hs,
+    bonus: original.bonus,
+    slots_ocupados: original.slots_ocupados ?? 1,
+    valor: original.valor,
+    moeda: original.moeda || 'RST',
+    ativo: original.ativo !== false,
+    usar_rack: original.usar_rack !== false,
+    usar_cb: original.usar_cb !== false,
+  });
+
+  if (error){ showToast('Erro ao duplicar minerador.'); return; }
+  showToast('Minerador duplicado — edite a cópia se precisar ajustar algo.');
+  await loadMiners();
+}
+
 /* ---------------- Racks CRUD ---------------- */
 let editingRackId = null;
 
@@ -1241,6 +1267,7 @@ function renderRacks(){
         <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') : ''}</div>
       </div>
       <div class="miner-actions">
+        <button class="icon-btn" onclick="duplicarRack('${r.id}')" title="Duplicar">⧉</button>
         <button class="icon-btn" onclick="startRackEdit('${r.id}')" title="Editar">✎</button>
         <button class="icon-btn" onclick="deleteRack('${r.id}')" title="Remover">✕</button>
       </div>
@@ -1394,6 +1421,25 @@ async function deleteRack(id){
   const { error } = await supabaseClient.from('racks').delete().eq('id', id);
   if (error){ showToast('Erro ao remover rack.'); return; }
   showToast('Rack removido.');
+  await loadRacks();
+}
+
+async function duplicarRack(id){
+  const original = myRacks.find(r => r.id === id);
+  if (!original) return;
+
+  const { error } = await supabaseClient.from('racks').insert({
+    user_id: currentUser.id,
+    nome: original.nome + ' (cópia)',
+    bonus: original.bonus,
+    slots: original.slots ?? 4,
+    valor: original.valor,
+    moeda: original.moeda || 'RLT',
+    ativo: original.ativo !== false,
+  });
+
+  if (error){ showToast('Erro ao duplicar rack.'); return; }
+  showToast('Rack duplicado — edite a cópia se precisar ajustar algo.');
   await loadRacks();
 }
 
@@ -1667,7 +1713,11 @@ function montarRackGreedy(minersOrdenados, capacidade){
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
-  const racksAtivos = myRacks.filter(r => r.ativo !== false).sort((a, b) => Number(b.bonus) - Number(a.bonus));
+  const racksAtivos = myRacks.filter(r => r.ativo !== false).sort((a, b) => {
+    const bonusDiff = Number(b.bonus) - Number(a.bonus);
+    if (bonusDiff !== 0) return bonusDiff;
+    return (Number(b.slots) || 4) - (Number(a.slots) || 4); // empatou no bônus: o rack com mais slots vem primeiro
+  });
   if (!racksAtivos.length){
     box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "ativo") pelo menos um rack na aba Rack.</div></div>`;
     return;
@@ -1768,9 +1818,9 @@ function calcularMelhorRack(){
     const celulaMiner = (m, numSlot) => `
       <div class="slot-cell">
         <div class="num">SLOT ${numSlot}</div>
-        <div style="display:flex; align-items:center; gap:8px; margin:3px 0 5px;">
-          ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb" style="width:41px; height:20px;">` : ''}
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:3px 0 5px;">
           <div class="name" style="margin:0;">${escapeHtml(m.nome)}</div>
+          ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb" style="width:100px; height:50px; flex-shrink:0;">` : ''}
         </div>
         <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
         <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
@@ -1789,9 +1839,9 @@ function calcularMelhorRack(){
               ${p.tipo === 'inteira' ? `
                 <div class="slot-cell inteira">
                   <div class="num">SLOT ${p.inicio} e ${p.fim} · ocupa a prateleira inteira</div>
-                  <div style="display:flex; align-items:center; gap:8px; margin:3px 0 5px;">
-                    ${p.a.foto ? `<img src="${p.a.foto}" alt="" class="miner-thumb" style="width:41px; height:20px;">` : ''}
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:3px 0 5px;">
                     <div class="name" style="margin:0;">${escapeHtml(p.a.nome)}</div>
+                    ${p.a.foto ? `<img src="${p.a.foto}" alt="" class="miner-thumb" style="width:100px; height:50px; flex-shrink:0;">` : ''}
                   </div>
                   <div class="stat">Poder <b>${fmtNum(p.a.poder)} ${p.a.unidade || 'H/s'}</b></div>
                   <div class="stat">Bônus <b>${fmtNum(p.a.bonus)}%</b></div>
