@@ -601,7 +601,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v32';
+const APP_VERSION = 'v33';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1859,6 +1859,7 @@ function renderMinersSobrando(poolMiners){
             <div class="name">${escapeHtml(m.nome)}</div>
             <div class="stats">${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)</div>
           </div>
+          ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb" style="width:100px; height:50px; flex-shrink:0;">` : ''}
           <div class="cb-score">
             <div class="val">${formatarPoder(scoreMiner(m))}</div>
             <div class="lbl">poder + bônus</div>
