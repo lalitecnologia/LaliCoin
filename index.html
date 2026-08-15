@@ -601,7 +601,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v30';
+const APP_VERSION = 'v32';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1185,15 +1185,15 @@ async function duplicarMiner(id){
 
   const { error } = await supabaseClient.from('miners').insert({
     user_id: currentUser.id,
-    nome: original.nome + ' (cópia)',
+    nome: original.nome,
     foto: original.foto || null,
     poder: original.poder,
     unidade: original.unidade || 'H/s',
     poder_hs: original.poder_hs,
     bonus: original.bonus,
     slots_ocupados: original.slots_ocupados ?? 1,
-    valor: original.valor,
-    moeda: original.moeda || 'RST',
+    valor: 0,
+    moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
     usar_rack: original.usar_rack !== false,
     usar_cb: original.usar_cb !== false,
@@ -1701,6 +1701,26 @@ function calcularMelhorRack(){
     resultadosPorRack.push({ rack, resultado });
   }
 
+  // soma o poder de todos os racks que tiveram resultado (ignora os "insuficiente"/"semCombinacao")
+  const poderTotalGeral = resultadosPorRack.reduce((s, item) => s + (item.resultado ? item.resultado.poderTotal : 0), 0);
+  const racksComResultado = resultadosPorRack.filter(item => item.resultado).length;
+
+  const resumoGeral = `
+    <div class="card" style="border-color:var(--gold-dim); background:rgba(232,185,62,0.05);">
+      <div class="section-title">Soma geral (todos os racks)</div>
+      <div class="result-summary">
+        <div class="metric">
+          <div class="val">${formatarPoder(poderTotalGeral)}</div>
+          <div class="lbl">Poder total combinado</div>
+        </div>
+        <div class="metric">
+          <div class="val">${racksComResultado}</div>
+          <div class="lbl">Rack(s) preenchido(s)</div>
+        </div>
+      </div>
+    </div>
+  `;
+
   const resumoPrioridade = `
     <div class="card">
       <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
@@ -1713,7 +1733,7 @@ function calcularMelhorRack(){
     </div>
   `;
 
-  box.innerHTML = resumoPrioridade + resultadosPorRack.map(item => {
+  box.innerHTML = resumoGeral + resumoPrioridade + resultadosPorRack.map(item => {
     if (item.insuficiente){
       return `
         <div class="card">
