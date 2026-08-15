@@ -441,16 +441,15 @@
       <div class="card">
         <div class="section-title">Cadastrar rack</div>
 
-        <button type="button" class="btn btn-ghost" id="btn-ler-imagem-rack" onclick="document.getElementById('rack-imagem-input').click()">
-          📷 Ler imagem do rack
-        </button>
-        <input type="file" id="rack-imagem-input" accept="image/*" style="display:none;" onchange="lerImagemRack(event)">
-        <p class="hint" style="margin-top:8px; margin-bottom:16px;">
-          Tira uma foto ou seleciona um print da tela do rack no RollerCoin — o app tenta preencher
-          os campos abaixo automaticamente. Sempre revise antes de salvar, a leitura pode errar.
-        </p>
-
         <form onsubmit="return handleAddRack(event)">
+          <div class="field">
+            <label>Foto do rack</label>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img id="rack-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'rack-foto-preview', 'rack-foto-data')">
+            </div>
+            <input type="hidden" id="rack-foto-data">
+          </div>
           <div class="field">
             <label>Nome do rack</label>
             <input type="text" id="rack-nome" required placeholder="Ex: Rack Season 24">
@@ -602,7 +601,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v29';
+const APP_VERSION = 'v30';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1230,6 +1229,14 @@ function renderRacks(){
       return `
         <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
           <div class="field" style="margin-bottom:0;">
+            <label>Foto do rack</label>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img id="edit-rack-foto-preview-${r.id}" src="${r.foto || ''}" alt="" class="miner-thumb" style="display:${r.foto ? 'block' : 'none'};">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-rack-foto-preview-${r.id}', 'edit-rack-foto-data-${r.id}')">
+            </div>
+            <input type="hidden" id="edit-rack-foto-data-${r.id}" value="${r.foto || ''}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
             <label>Nome do rack</label>
             <input type="text" id="edit-rack-nome-${r.id}" value="${escapeHtml(r.nome)}">
           </div>
@@ -1263,8 +1270,11 @@ function renderRacks(){
     return `
     <div class="miner-row">
       <div class="miner-info">
-        <div class="name">${escapeHtml(r.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots ?? 4} slots</span> ${tagOff}</div>
-        <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') : ''}</div>
+        ${r.foto ? `<img src="${r.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">▤</div>`}
+        <div class="miner-info-text">
+          <div class="name">${escapeHtml(r.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots ?? 4} slots</span> ${tagOff}</div>
+          <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RST') : ''}</div>
+        </div>
       </div>
       <div class="miner-actions">
         <button class="icon-btn" onclick="duplicarRack('${r.id}')" title="Duplicar">⧉</button>
@@ -1292,6 +1302,7 @@ function cancelRackEdit(){
 
 async function saveRackEdit(id){
   const nome = document.getElementById(`edit-rack-nome-${id}`).value.trim();
+  const foto = document.getElementById(`edit-rack-foto-data-${id}`).value || null;
   const bonus = parseFloat(document.getElementById(`edit-rack-bonus-${id}`).value);
   const slots = parseInt(document.getElementById(`edit-rack-slots-${id}`).value, 10);
   const valor = parseFloat(document.getElementById(`edit-rack-valor-${id}`).value);
@@ -1304,7 +1315,7 @@ async function saveRackEdit(id){
   }
 
   const { error } = await supabaseClient
-    .from('racks').update({ nome, bonus, slots, valor, moeda, ativo }).eq('id', id);
+    .from('racks').update({ nome, foto, bonus, slots, valor, moeda, ativo }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -1315,86 +1326,10 @@ async function saveRackEdit(id){
   await loadRacks();
 }
 
-/* ---------------- Leitura de imagem (OCR) para cadastro de rack ---------------- */
-async function lerImagemRack(event){
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const btn = document.getElementById('btn-ler-imagem-rack');
-  const textoOriginal = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '⏳ Lendo imagem...';
-
-  try {
-    const { data } = await Tesseract.recognize(file, 'por+eng');
-    const texto = data.text || '';
-    preencherFormularioRackComOcr(texto);
-    showToast('Dados extraídos — revise antes de salvar.');
-  } catch (err){
-    showToast('Não foi possível ler a imagem. Preencha manualmente.');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = textoOriginal;
-    event.target.value = '';
-  }
-}
-
-function preencherFormularioRackComOcr(texto){
-  const linhas = texto.split('\n').map(l => l.trim()).filter(Boolean);
-
-  // Bônus: procura um número seguido de %
-  const matchBonus = texto.match(/(\d+[.,]?\d*)\s*%/);
-  if (matchBonus){
-    document.getElementById('rack-bonus').value = matchBonus[1].replace(',', '.');
-  }
-
-  // Slots: procura um número seguido de "slots", "espaços" ou "vagas"
-  const matchSlots = texto.match(/(\d+)\s*(slots?|espaços?|vagas?)/i);
-  if (matchSlots){
-    document.getElementById('rack-slots').value = matchSlots[1];
-  }
-
-  // Valor + moeda: procura um número perto de um dos códigos de moeda conhecidos
-  let valorEncontrado = null;
-  let moedaEncontrada = null;
-  for (const codigo of MOEDAS){
-    const regex = new RegExp('([\\d.,]+)\\s*' + codigo + '|' + codigo + '\\s*([\\d.,]+)', 'i');
-    const m = texto.match(regex);
-    if (m){
-      const bruto = (m[1] || m[2] || '').replace(/\.(?=\d{3})/g, '').replace(',', '.');
-      const num = parseFloat(bruto);
-      if (!isNaN(num)){
-        valorEncontrado = num;
-        moedaEncontrada = codigo;
-        break;
-      }
-    }
-  }
-  if (valorEncontrado !== null){
-    document.getElementById('rack-valor').value = valorEncontrado;
-  }
-  if (moedaEncontrada){
-    document.getElementById('rack-moeda').value = moedaEncontrada;
-    atualizarBadge('rack-moeda-badge', moedaEncontrada);
-  }
-
-  // Nome: primeira linha "de texto" que não seja só número, %, ou moeda
-  const linhaNome = linhas.find(l => {
-    const semEspaco = l.replace(/\s/g, '');
-    if (semEspaco.length < 3) return false;
-    if (/^[\d.,%]+$/.test(semEspaco)) return false;
-    if (MOEDAS.some(c => new RegExp('^' + c + '$', 'i').test(semEspaco))) return false;
-    if (/slots?|espaços?|vagas?/i.test(l)) return false;
-    return true;
-  });
-  if (linhaNome){
-    document.getElementById('rack-nome').value = linhaNome;
-  }
-}
-
 async function handleAddRack(e){
   e.preventDefault();
   const nome = document.getElementById('rack-nome').value.trim();
+  const foto = document.getElementById('rack-foto-data').value || null;
   const bonus = parseFloat(document.getElementById('rack-bonus').value);
   const slots = parseInt(document.getElementById('rack-slots').value, 10);
   const valor = parseFloat(document.getElementById('rack-valor').value);
@@ -1402,7 +1337,7 @@ async function handleAddRack(e){
   const ativo = document.getElementById('rack-ativo').checked;
 
   const { error } = await supabaseClient
-    .from('racks').insert({ user_id: currentUser.id, nome, bonus, slots, valor, moeda, ativo });
+    .from('racks').insert({ user_id: currentUser.id, nome, foto, bonus, slots, valor, moeda, ativo });
 
   if (error){
     showToast('Erro ao adicionar rack.');
@@ -1412,6 +1347,9 @@ async function handleAddRack(e){
   document.getElementById('rack-bonus').value = '';
   document.getElementById('rack-slots').value = '4';
   document.getElementById('rack-valor').value = '';
+  document.getElementById('rack-foto-data').value = '';
+  document.getElementById('rack-foto-preview').style.display = 'none';
+  document.getElementById('rack-foto-preview').src = '';
   showToast('Rack adicionado.');
   await loadRacks();
   return false;
@@ -1431,6 +1369,7 @@ async function duplicarRack(id){
   const { error } = await supabaseClient.from('racks').insert({
     user_id: currentUser.id,
     nome: original.nome + ' (cópia)',
+    foto: original.foto || null,
     bonus: original.bonus,
     slots: original.slots ?? 4,
     valor: original.valor,
