@@ -416,7 +416,7 @@
           <div class="field">
             <label>Valor pago</label>
             <div class="moeda-field">
-              <input type="number" id="miner-valor" required step="any" min="0" placeholder="Ex: 250" style="flex:1;">
+              <input type="number" id="miner-valor" required step="any" min="0" value="0" placeholder="Ex: 250" style="flex:1;">
               <span class="coin-badge" id="miner-moeda-badge"></span>
               <select id="miner-moeda" onchange="atualizarBadge('miner-moeda-badge', this.value)" style="flex:1.4;"></select>
             </div>
@@ -465,7 +465,7 @@
           <div class="field">
             <label>Valor pago</label>
             <div class="moeda-field">
-              <input type="number" id="rack-valor" required step="any" min="0" placeholder="Ex: 5000" style="flex:1;">
+              <input type="number" id="rack-valor" required step="any" min="0" value="0" placeholder="Ex: 5000" style="flex:1;">
               <span class="coin-badge" id="rack-moeda-badge"></span>
               <select id="rack-moeda" onchange="atualizarBadge('rack-moeda-badge', this.value)" style="flex:1.4;"></select>
             </div>
@@ -601,7 +601,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v33';
+const APP_VERSION = 'v34';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1163,7 +1163,7 @@ async function handleAddMiner(e){
   document.getElementById('miner-poder').value = '';
   document.getElementById('miner-bonus').value = '';
   document.getElementById('miner-slots-ocupados').value = '2';
-  document.getElementById('miner-valor').value = '';
+  document.getElementById('miner-valor').value = '0';
   document.getElementById('miner-foto-data').value = '';
   document.getElementById('miner-foto-preview').style.display = 'none';
   document.getElementById('miner-foto-preview').src = '';
@@ -1346,7 +1346,7 @@ async function handleAddRack(e){
   document.getElementById('rack-nome').value = '';
   document.getElementById('rack-bonus').value = '';
   document.getElementById('rack-slots').value = '4';
-  document.getElementById('rack-valor').value = '';
+  document.getElementById('rack-valor').value = '0';
   document.getElementById('rack-foto-data').value = '';
   document.getElementById('rack-foto-preview').style.display = 'none';
   document.getElementById('rack-foto-preview').src = '';
