@@ -601,7 +601,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v37';
+const APP_VERSION = 'v38';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -716,6 +716,12 @@ function formatarPoderEm(valorHs, unidade){
 // Formata um número simples no padrão brasileiro (vírgula decimal)
 function fmtNum(n){
   return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
+// Formata mantendo TODAS as casas decimais como foram cadastradas, sem arredondar/cortar
+// (usado especificamente pro campo "valor pago", que pode ter muitas casas em algumas moedas)
+function fmtValorCompleto(n){
+  return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 20 });
 }
 
 // Descobre a unidade predominante usada pelos miners de um combo (a mais usada; empate = a maior)
@@ -1078,7 +1084,7 @@ function renderMiners(){
         ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">⛏</div>`}
         <div class="miner-info-text">
           <div class="name">${escapeHtml(m.nome)} ${tagsOff}</div>
-          <div class="stats">Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)${m.valor !== null && m.valor !== undefined ? ' · ' + fmtNum(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
+          <div class="stats">Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)${m.valor !== null && m.valor !== undefined ? ' · ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
         </div>
       </div>
       <div class="miner-actions">
@@ -1280,7 +1286,7 @@ function renderRacks(){
         ${r.foto ? `<img src="${r.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">▤</div>`}
         <div class="miner-info-text">
           <div class="name">${escapeHtml(r.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots ?? 4} slots</span> ${tagOff}</div>
-          <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor !== null && r.valor !== undefined ? ' · ' + fmtNum(r.valor) + ' ' + (r.moeda || 'RLT') : ''}</div>
+          <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor !== null && r.valor !== undefined ? ' · ' + fmtValorCompleto(r.valor) + ' ' + (r.moeda || 'RLT') : ''}</div>
         </div>
       </div>
       <div class="miner-actions">
