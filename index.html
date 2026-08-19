@@ -601,7 +601,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v38';
+const APP_VERSION = 'v39';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1665,15 +1665,21 @@ function montarRackGreedy(minersOrdenados, capacidade){
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
-  const racksAtivos = myRacks.filter(r => r.ativo !== false).sort((a, b) => {
+  const LIMITE_RACKS_POR_SALA = 12; // no RollerCoin só cabem 12 racks por sala
+
+  const racksAtivosTodos = myRacks.filter(r => r.ativo !== false).sort((a, b) => {
     const bonusDiff = Number(b.bonus) - Number(a.bonus);
     if (bonusDiff !== 0) return bonusDiff;
     return (Number(b.slots) || 4) - (Number(a.slots) || 4); // empatou no bônus: o rack com mais slots vem primeiro
   });
-  if (!racksAtivos.length){
+  if (!racksAtivosTodos.length){
     box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "ativo") pelo menos um rack na aba Rack.</div></div>`;
     return;
   }
+
+  // limita aos 12 racks de maior prioridade (maior bônus) — quantidade máxima permitida por sala no jogo
+  const racksAtivos = racksAtivosTodos.slice(0, LIMITE_RACKS_POR_SALA);
+  const racksExcedentes = racksAtivosTodos.length - racksAtivos.length;
 
   // ordena TODOS os mineradores elegíveis, uma única vez, do maior poder+bônus pro menor —
   // essa é a fila de prioridade usada em todos os racks, na ordem em que eles forem processados
@@ -1734,9 +1740,15 @@ function calcularMelhorRack(){
     </div>
   `;
 
+  const avisoLimite = racksExcedentes > 0 ? `
+    <div class="card" style="border-color:var(--gold-dim);">
+      <div class="empty-state">Você tem ${racksAtivosTodos.length} racks ativos, mas uma sala do RollerCoin só permite 12. Os ${racksExcedentes} rack(s) de menor bônus foram deixados de fora deste cálculo.</div>
+    </div>
+  ` : '';
+
   const resumoPrioridade = `
     <div class="card">
-      <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
+      <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro, máx. 12 por sala)</div>
       ${racksAtivos.map((r, i) => `
         <div class="alt-item">
           <div class="names">${i + 1}. ${escapeHtml(r.nome)} (${r.slots || 4} slots)</div>
@@ -1746,7 +1758,7 @@ function calcularMelhorRack(){
     </div>
   `;
 
-  box.innerHTML = resumoGeral + resumoPrioridade + resultadosPorRack.map(item => {
+  box.innerHTML = resumoGeral + avisoLimite + resumoPrioridade + resultadosPorRack.map(item => {
     if (item.insuficiente){
       return `
         <div class="card">
