@@ -510,12 +510,10 @@
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
           Distribui seus mineradores ativos entre os racks ativos, respeitando a quantidade de slots de
           cada rack e quantos slots cada minerador ocupa (1, 2 ou mais). Racks com maior bônus têm
-          prioridade e escolhem primeiro os melhores mineradores disponíveis; um minerador só pode ocupar um
-          rack por vez, e mineradores com o mesmo nome não podem estar juntos no mesmo rack. Para cada
-          rack, o cálculo soma o poder dos mineradores escolhidos e aplica sobre esse total o bônus dos
-          mineradores somado ao bônus do próprio rack. Quando há muitos mineradores e slots, o app pode usar
-          uma estimativa (marcada como "Estimativa") em vez de testar todas as combinações possíveis,
-          para não travar o navegador.
+          prioridade e escolhem primeiro os melhores mineradores disponíveis (em caso de empate no bônus,
+          o rack com mais slots vem primeiro); um minerador só pode ocupar um rack por vez, mesmo que haja
+          outro minerador de mesmo nome disponível. Para cada rack, o cálculo soma o poder dos mineradores
+          escolhidos e aplica sobre esse total o bônus dos mineradores somado ao bônus do próprio rack.
         </p>
         <button class="btn btn-primary" style="margin-top:14px;" onclick="calcularMelhorRack()">Calcular distribuição</button>
       </div>
@@ -601,7 +599,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v39';
+const APP_VERSION = 'v40';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1629,12 +1627,9 @@ function combinacoes(arr, k){
 // duas vezes no mesmo rack. Miners de 2 slots só podem ocupar uma prateleira inteira e vazia.
 function montarRackGreedy(minersOrdenados, capacidade){
   const slots = new Array(capacidade).fill(null);
-  const nomesUsados = new Set();
   const escolhidos = [];
 
   for (const m of minersOrdenados){
-    if (nomesUsados.has(chaveNome(m.nome))) continue; // já tem esse nome nesse rack
-
     const custo = Number(m.slots_ocupados) || 1;
 
     if (custo >= 2){
@@ -1656,7 +1651,6 @@ function montarRackGreedy(minersOrdenados, capacidade){
     }
 
     escolhidos.push(m);
-    nomesUsados.add(chaveNome(m.nome));
   }
 
   return { slots, escolhidos };
@@ -1750,11 +1744,12 @@ function calcularMelhorRack(){
     ? ` · ${fmtValorCompleto(rack.valor)} ${rack.moeda || 'RLT'}`
     : '';
 
-  box.innerHTML = resumoGeral + resumoPrioridade + resultadosPorRack.map(item => {
+  box.innerHTML = resumoGeral + resumoPrioridade + resultadosPorRack.map((item, indiceRack) => {
+    const prefixoSala = `Sala 1 / Rack ${indiceRack + 1} - `;
     if (item.insuficiente){
       return `
         <div class="card">
-          <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} ${item.rack.slots || 4} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
+          <div class="cb-group-title" style="margin-top:0;">${prefixoSala}${escapeHtml(item.rack.nome)} ${item.rack.slots || 4} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
           <div class="empty-state">Não há mineradores suficientes disponíveis para este rack (já usados nos racks de maior prioridade).</div>
         </div>
       `;
@@ -1762,7 +1757,7 @@ function calcularMelhorRack(){
     if (item.semCombinacao){
       return `
         <div class="card">
-          <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} ${item.rack.slots || 4} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
+          <div class="cb-group-title" style="margin-top:0;">${prefixoSala}${escapeHtml(item.rack.nome)} ${item.rack.slots || 4} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
           <div class="empty-state">Nenhum minerador coube nesse rack (nomes repetidos ou slots incompatíveis).</div>
         </div>
       `;
@@ -1807,7 +1802,7 @@ function calcularMelhorRack(){
 
     return `
       <div class="card">
-        <div class="cb-group-title" style="margin-top:0;">${escapeHtml(item.rack.nome)} ${capacidade} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
+        <div class="cb-group-title" style="margin-top:0;">${prefixoSala}${escapeHtml(item.rack.nome)} ${capacidade} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
         <div class="estante">
           ${prateleiras.map((p, i) => `
             <div class="prateleira">
