@@ -23,6 +23,29 @@
     --success:#4CAF6D;
     --radius:14px;
   }
+  /* Tema claro — cores mais suaves, fundo claro */
+  body.tema-claro{
+    --bg:#F5F6F8;
+    --surface:#FFFFFF;
+    --surface-2:#EEF0F3;
+    --border:#E1E4E9;
+    --gold:#C9A227;
+    --gold-dim:#B8A46A;
+    --teal:#4E9C95;
+    --text:#2B2F36;
+    --muted:#6F7885;
+    --danger:#C94C46;
+    --success:#4F9A6C;
+  }
+  body.tema-claro .coin{
+    box-shadow:0 0 10px rgba(201,162,39,0.25);
+  }
+  body.tema-claro{
+    background:
+      radial-gradient(circle at 20% -10%, rgba(201,162,39,0.05), transparent 40%),
+      radial-gradient(circle at 100% 0%, rgba(78,156,149,0.04), transparent 45%),
+      var(--bg);
+  }
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{height:100%;}
   body{
@@ -257,6 +280,26 @@
     vertical-align:middle;
   }
 
+  .tema-opcoes{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .tema-card{
+    background:var(--surface-2); border:2px solid var(--border); border-radius:12px;
+    padding:14px; text-align:left; transition:border-color .15s;
+  }
+  .tema-card.selecionado{border-color:var(--gold);}
+  .tema-preview{
+    height:44px; border-radius:8px; display:flex; align-items:center; justify-content:center; gap:8px;
+    margin-bottom:10px; border:1px solid rgba(255,255,255,0.08);
+  }
+  .tema-preview-escuro{background:#0B0E14;}
+  .tema-preview-claro{background:#F5F6F8; border-color:#E1E4E9;}
+  .tema-preview-dot{width:12px; height:12px; border-radius:50%;}
+  .tema-preview-dot-gold{background:#E8B93E;}
+  .tema-preview-dot-teal{background:#3EC6C0;}
+  .tema-preview-claro .tema-preview-dot-gold{background:#C9A227;}
+  .tema-preview-claro .tema-preview-dot-teal{background:#4E9C95;}
+  .tema-nome{font-weight:600; font-size:14px; color:var(--text);}
+  .tema-desc{font-size:12px; color:var(--muted); margin-top:2px;}
+
   .cb-row{
     display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);
   }
@@ -367,6 +410,9 @@
       </button>
       <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
         <span class="ic">◎</span>Perfil
+      </button>
+      <button class="tab-btn" data-screen="configuracao" onclick="switchScreen('configuracao')">
+        <span class="ic">⚙</span>Configuração
       </button>
     </nav>
   </div>
@@ -590,6 +636,34 @@
       </div>
       <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
     </section>
+
+    <!-- CONFIGURAÇÃO -->
+    <section id="screen-configuracao" class="screen">
+      <div class="card">
+        <div class="section-title">Tema do aplicativo</div>
+        <p class="hint" style="margin-bottom:14px; text-align:left;">
+          Escolha a aparência do LaliCoin. A escolha fica salva na sua conta e vale em qualquer dispositivo.
+        </p>
+        <div class="tema-opcoes">
+          <button type="button" class="tema-card" id="tema-opcao-escuro" onclick="selecionarTema('escuro')">
+            <div class="tema-preview tema-preview-escuro">
+              <span class="tema-preview-dot tema-preview-dot-gold"></span>
+              <span class="tema-preview-dot tema-preview-dot-teal"></span>
+            </div>
+            <div class="tema-nome">Escuro</div>
+            <div class="tema-desc">O visual atual, mais contrastado</div>
+          </button>
+          <button type="button" class="tema-card" id="tema-opcao-claro" onclick="selecionarTema('claro')">
+            <div class="tema-preview tema-preview-claro">
+              <span class="tema-preview-dot tema-preview-dot-gold"></span>
+              <span class="tema-preview-dot tema-preview-dot-teal"></span>
+            </div>
+            <div class="tema-nome">Claro</div>
+            <div class="tema-desc">Fundo claro, cores mais suaves</div>
+          </button>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -599,7 +673,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v40';
+const APP_VERSION = 'v41';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -876,6 +950,27 @@ async function handleSignup(e){
 }
 
 /* ---------------- Salvar perfil ---------------- */
+/* ---------------- Tema ---------------- */
+function aplicarTema(tema){
+  document.body.classList.toggle('tema-claro', tema === 'claro');
+  const cardEscuro = document.getElementById('tema-opcao-escuro');
+  const cardClaro = document.getElementById('tema-opcao-claro');
+  if (cardEscuro) cardEscuro.classList.toggle('selecionado', tema !== 'claro');
+  if (cardClaro) cardClaro.classList.toggle('selecionado', tema === 'claro');
+}
+
+async function selecionarTema(tema){
+  aplicarTema(tema);
+  if (!currentUser) return;
+  const { error } = await supabaseClient.from('profiles').update({ tema }).eq('id', currentUser.id);
+  if (error){
+    showToast('Não foi possível salvar o tema, mas ele continua aplicado agora.');
+    return;
+  }
+  currentProfile = { ...currentProfile, tema };
+  showToast('Tema salvo.');
+}
+
 async function handleSalvarPerfil(e){
   e.preventDefault();
   const errEl = document.getElementById('perfil-error');
@@ -975,6 +1070,7 @@ async function onAuthReady(user){
   }
 
   popularSelectsMoeda();
+  aplicarTema(profile?.tema || 'escuro');
   await loadMiners();
   await loadRacks();
 }
