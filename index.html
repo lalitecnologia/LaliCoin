@@ -408,6 +408,9 @@
       <button class="tab-btn" data-screen="custobeneficio" onclick="switchScreen('custobeneficio')">
         <span class="ic">$</span>Cálculo Benefício
       </button>
+      <button class="tab-btn" data-screen="anotacoes" onclick="switchScreen('anotacoes')">
+        <span class="ic">✎</span>Anotações
+      </button>
       <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
         <span class="ic">◎</span>Perfil
       </button>
@@ -601,6 +604,20 @@
       <div id="resultado-melhorminer"></div>
     </section>
 
+    <!-- ANOTAÇÕES -->
+    <section id="screen-anotacoes" class="screen">
+      <div class="card">
+        <div class="section-title">Minhas anotações</div>
+        <p class="hint" style="margin-bottom:10px; text-align:left;">
+          Bloco de notas pessoal — só você vê o que escrever aqui, mesmo que outras pessoas usem o
+          mesmo LaliCoin com contas diferentes.
+        </p>
+        <textarea id="anotacoes-texto" rows="14" placeholder="Escreva aqui suas anotações, lembretes, estratégias..." style="width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--text); padding:12px; font-family:'Inter', sans-serif; font-size:14px; line-height:1.5;"></textarea>
+        <button class="btn btn-primary" style="margin-top:12px;" onclick="salvarAnotacoes()">Salvar anotações</button>
+        <div class="hint" id="anotacoes-status" style="margin-top:8px;"></div>
+      </div>
+    </section>
+
     <!-- PERFIL -->
     <section id="screen-perfil" class="screen">
       <div class="card">
@@ -673,7 +690,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v41';
+const APP_VERSION = 'v42';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -950,6 +967,36 @@ async function handleSignup(e){
 }
 
 /* ---------------- Salvar perfil ---------------- */
+/* ---------------- Anotações (individuais por usuário) ---------------- */
+async function loadAnotacoes(){
+  const { data, error } = await supabaseClient
+    .from('anotacoes').select('conteudo').eq('user_id', currentUser.id).maybeSingle();
+  const campo = document.getElementById('anotacoes-texto');
+  if (campo) campo.value = (!error && data) ? (data.conteudo || '') : '';
+}
+
+async function salvarAnotacoes(){
+  const conteudo = document.getElementById('anotacoes-texto').value;
+  const status = document.getElementById('anotacoes-status');
+
+  const { data: existente } = await supabaseClient
+    .from('anotacoes').select('id').eq('user_id', currentUser.id).maybeSingle();
+
+  let error;
+  if (existente){
+    ({ error } = await supabaseClient.from('anotacoes').update({ conteudo }).eq('user_id', currentUser.id));
+  } else {
+    ({ error } = await supabaseClient.from('anotacoes').insert({ user_id: currentUser.id, conteudo }));
+  }
+
+  if (error){
+    showToast('Erro ao salvar as anotações.');
+    return;
+  }
+  showToast('Anotações salvas.');
+  if (status) status.textContent = 'Salvo agora mesmo.';
+}
+
 /* ---------------- Tema ---------------- */
 function aplicarTema(tema){
   document.body.classList.toggle('tema-claro', tema === 'claro');
@@ -1073,6 +1120,7 @@ async function onAuthReady(user){
   aplicarTema(profile?.tema || 'escuro');
   await loadMiners();
   await loadRacks();
+  await loadAnotacoes();
 }
 
 /* ---------------- Screens / nav ---------------- */
