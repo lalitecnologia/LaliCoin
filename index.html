@@ -22,6 +22,7 @@
     --danger:#E1554A;
     --success:#4CAF6D;
     --radius:14px;
+    --header-bg:rgba(11,14,20,0.96);
   }
   /* Tema claro — cores mais suaves, fundo claro */
   body.tema-claro{
@@ -36,6 +37,7 @@
     --muted:#6F7885;
     --danger:#C94C46;
     --success:#4F9A6C;
+    --header-bg:rgba(255,255,255,0.92);
   }
   body.tema-claro .coin{
     box-shadow:0 0 10px rgba(201,162,39,0.25);
@@ -70,8 +72,8 @@
   #app{display:none; flex-direction:column; min-height:100vh;}
   #app.active{display:flex;}
   .app-header{
-    position:sticky; top:0; z-index:20; flex-shrink:0;
-    background:rgba(11,14,20,0.96); backdrop-filter:blur(8px);
+    position:fixed; top:0; left:0; right:0; z-index:20;
+    background:var(--header-bg); backdrop-filter:blur(8px);
   }
   .topbar{
     display:flex; align-items:center; justify-content:space-between;
@@ -270,6 +272,10 @@
 
   .tag-off{
     font-size:9px; color:var(--muted); border:1px solid var(--border); border-radius:100px;
+    padding:2px 7px; text-transform:uppercase; letter-spacing:0.04em;
+  }
+  .tag-venda{
+    font-size:9px; color:var(--success); border:1px solid var(--success); border-radius:100px;
     padding:2px 7px; text-transform:uppercase; letter-spacing:0.04em;
   }
   .counter-badge{
@@ -474,6 +480,7 @@
             <label class="check-line"><input type="checkbox" id="miner-ativo" checked> Minerador ativo</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-rack" checked> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-cb" checked> Considerar no cálculo de custo-benefício</label>
+            <label class="check-line"><input type="checkbox" id="miner-pode-vendido"> Pode ser vendido</label>
           </div>
           <button type="submit" class="btn btn-primary">Adicionar minerador</button>
         </form>
@@ -521,6 +528,7 @@
           </div>
           <div class="field">
             <label class="check-line"><input type="checkbox" id="rack-ativo" checked> Rack ativo</label>
+            <label class="check-line"><input type="checkbox" id="rack-pode-vendido"> Pode ser vendido</label>
           </div>
           <button type="submit" class="btn btn-primary">Adicionar rack</button>
         </form>
@@ -564,7 +572,6 @@
           outro minerador de mesmo nome disponível. Para cada rack, o cálculo soma o poder dos mineradores
           escolhidos e aplica sobre esse total o bônus dos mineradores somado ao bônus do próprio rack.
         </p>
-        <button class="btn btn-primary" style="margin-top:14px;" onclick="calcularMelhorRack()">Calcular distribuição</button>
       </div>
 
       <div id="resultado-calculo"></div>
@@ -690,7 +697,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v42';
+const APP_VERSION = 'v44';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1128,6 +1135,17 @@ function switchScreen(name){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
+
+  if (name === 'calculo'){
+    // busca miners e racks direto do banco antes de calcular, pra nunca ficar com dados
+    // desatualizados (ex: um cadastro feito e ido direto pra essa aba, sem passar por outra tela)
+    document.getElementById('resultado-calculo').innerHTML = '<div class="card"><div class="empty-state">Carregando dados atualizados...</div></div>';
+    (async () => {
+      await loadMiners();
+      await loadRacks();
+      calcularMelhorRack();
+    })();
+  }
 }
 
 /* ---------------- Miners CRUD ---------------- */
@@ -1207,6 +1225,7 @@ function renderMiners(){
             <label class="check-line"><input type="checkbox" id="edit-ativo-${m.id}" ${m.ativo !== false ? 'checked' : ''}> Miner ativo</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-rack-${m.id}" ${m.usar_rack !== false ? 'checked' : ''}> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-cb-${m.id}" ${m.usar_cb !== false ? 'checked' : ''}> Considerar no cálculo de custo-benefício</label>
+            <label class="check-line"><input type="checkbox" id="edit-pode-vendido-${m.id}" ${m.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
           </div>
           <div style="display:flex; gap:8px; margin-top:4px;">
             <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveMinerEdit('${m.id}')">Salvar</button>
@@ -1218,7 +1237,8 @@ function renderMiners(){
     const tagsOff = [
       m.ativo === false ? '<span class="tag-off">Inativo</span>' : '',
       m.usar_rack === false ? '<span class="tag-off">Fora do rack</span>' : '',
-      m.usar_cb === false ? '<span class="tag-off">Fora do custo-benefício</span>' : ''
+      m.usar_cb === false ? '<span class="tag-off">Fora do custo-benefício</span>' : '',
+      m.pode_vendido ? '<span class="tag-venda">À venda</span>' : ''
     ].filter(Boolean).join(' ');
     return `
     <div class="miner-row">
@@ -1226,10 +1246,11 @@ function renderMiners(){
         ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">⛏</div>`}
         <div class="miner-info-text">
           <div class="name">${escapeHtml(m.nome)} ${tagsOff}</div>
-          <div class="stats">Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)${m.valor !== null && m.valor !== undefined ? ' · ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
+          <div class="stats">${m.pode_vendido ? 'PV' : 'NPV'} · Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)${m.valor !== null && m.valor !== undefined ? ' · ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
         </div>
       </div>
       <div class="miner-actions">
+        <button class="icon-btn" onclick="toggleAtivoMiner('${m.id}')" title="${m.ativo !== false ? 'Inativar' : 'Ativar'}">${m.ativo !== false ? '⏸' : '▶'}</button>
         <button class="icon-btn" onclick="duplicarMiner('${m.id}')" title="Duplicar">⧉</button>
         <button class="icon-btn" onclick="startMinerEdit('${m.id}')" title="Editar">✎</button>
         <button class="icon-btn" onclick="deleteMiner('${m.id}')" title="Remover">✕</button>
@@ -1266,6 +1287,7 @@ async function saveMinerEdit(id){
   const ativo = document.getElementById(`edit-ativo-${id}`).checked;
   const usar_rack = document.getElementById(`edit-usar-rack-${id}`).checked;
   const usar_cb = document.getElementById(`edit-usar-cb-${id}`).checked;
+  const pode_vendido = document.getElementById(`edit-pode-vendido-${id}`).checked;
 
   if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(slots_ocupados) || slots_ocupados < 1 || isNaN(valor)){
     showToast('Preencha todos os campos corretamente.');
@@ -1274,7 +1296,7 @@ async function saveMinerEdit(id){
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').update({ nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, moeda, ativo, usar_rack, usar_cb }).eq('id', id);
+    .from('miners').update({ nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, moeda, ativo, usar_rack, usar_cb, pode_vendido }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -1298,10 +1320,11 @@ async function handleAddMiner(e){
   const ativo = document.getElementById('miner-ativo').checked;
   const usar_rack = document.getElementById('miner-usar-rack').checked;
   const usar_cb = document.getElementById('miner-usar-cb').checked;
+  const pode_vendido = document.getElementById('miner-pode-vendido').checked;
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, moeda, ativo, usar_rack, usar_cb });
+    .from('miners').insert({ user_id: currentUser.id, nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, moeda, ativo, usar_rack, usar_cb, pode_vendido });
 
   if (error){
     showToast('Erro ao adicionar minerador.');
@@ -1315,6 +1338,7 @@ async function handleAddMiner(e){
   document.getElementById('miner-foto-data').value = '';
   document.getElementById('miner-foto-preview').style.display = 'none';
   document.getElementById('miner-foto-preview').src = '';
+  document.getElementById('miner-pode-vendido').checked = false;
   showToast('Miner adicionado.');
   await loadMiners();
   return false;
@@ -1324,6 +1348,16 @@ async function deleteMiner(id){
   const { error } = await supabaseClient.from('miners').delete().eq('id', id);
   if (error){ showToast('Erro ao remover minerador.'); return; }
   showToast('Miner removido.');
+  await loadMiners();
+}
+
+async function toggleAtivoMiner(id){
+  const original = myMiners.find(m => m.id === id);
+  if (!original) return;
+  const novoAtivo = !(original.ativo !== false);
+  const { error } = await supabaseClient.from('miners').update({ ativo: novoAtivo }).eq('id', id);
+  if (error){ showToast('Erro ao atualizar minerador.'); return; }
+  showToast(novoAtivo ? 'Minerador ativado.' : 'Minerador inativado.');
   await loadMiners();
 }
 
@@ -1345,6 +1379,7 @@ async function duplicarMiner(id){
     ativo: original.ativo !== false,
     usar_rack: original.usar_rack !== false,
     usar_cb: original.usar_cb !== false,
+    pode_vendido: false,
   });
 
   if (error){ showToast('Erro ao duplicar minerador.'); return; }
@@ -1413,6 +1448,7 @@ function renderRacks(){
           </div>
           <div class="field" style="margin-bottom:0;">
             <label class="check-line"><input type="checkbox" id="edit-rack-ativo-${r.id}" ${r.ativo !== false ? 'checked' : ''}> Rack ativo</label>
+            <label class="check-line"><input type="checkbox" id="edit-rack-pode-vendido-${r.id}" ${r.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
           </div>
           <div style="display:flex; gap:8px; margin-top:4px;">
             <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveRackEdit('${r.id}')">Salvar</button>
@@ -1421,7 +1457,7 @@ function renderRacks(){
         </div>
       `;
     }
-    const tagOff = r.ativo === false ? '<span class="tag-off">Inativo</span>' : '';
+    const tagOff = (r.ativo === false ? '<span class="tag-off">Inativo</span>' : '') + (r.pode_vendido ? ' <span class="tag-venda">À venda</span>' : '');
     return `
     <div class="miner-row">
       <div class="miner-info">
@@ -1432,6 +1468,7 @@ function renderRacks(){
         </div>
       </div>
       <div class="miner-actions">
+        <button class="icon-btn" onclick="toggleAtivoRack('${r.id}')" title="${r.ativo !== false ? 'Inativar' : 'Ativar'}">${r.ativo !== false ? '⏸' : '▶'}</button>
         <button class="icon-btn" onclick="duplicarRack('${r.id}')" title="Duplicar">⧉</button>
         <button class="icon-btn" onclick="startRackEdit('${r.id}')" title="Editar">✎</button>
         <button class="icon-btn" onclick="deleteRack('${r.id}')" title="Remover">✕</button>
@@ -1463,6 +1500,7 @@ async function saveRackEdit(id){
   const valor = parseFloat(document.getElementById(`edit-rack-valor-${id}`).value);
   const moeda = document.getElementById(`edit-rack-moeda-${id}`).value;
   const ativo = document.getElementById(`edit-rack-ativo-${id}`).checked;
+  const pode_vendido = document.getElementById(`edit-rack-pode-vendido-${id}`).checked;
 
   if (!nome || isNaN(bonus) || isNaN(slots) || slots < 1 || isNaN(valor)){
     showToast('Preencha todos os campos corretamente.');
@@ -1470,7 +1508,7 @@ async function saveRackEdit(id){
   }
 
   const { error } = await supabaseClient
-    .from('racks').update({ nome, foto, bonus, slots, valor, moeda, ativo }).eq('id', id);
+    .from('racks').update({ nome, foto, bonus, slots, valor, moeda, ativo, pode_vendido }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
@@ -1490,9 +1528,10 @@ async function handleAddRack(e){
   const valor = parseFloat(document.getElementById('rack-valor').value);
   const moeda = document.getElementById('rack-moeda').value;
   const ativo = document.getElementById('rack-ativo').checked;
+  const pode_vendido = document.getElementById('rack-pode-vendido').checked;
 
   const { error } = await supabaseClient
-    .from('racks').insert({ user_id: currentUser.id, nome, foto, bonus, slots, valor, moeda, ativo });
+    .from('racks').insert({ user_id: currentUser.id, nome, foto, bonus, slots, valor, moeda, ativo, pode_vendido });
 
   if (error){
     showToast('Erro ao adicionar rack.');
@@ -1505,6 +1544,7 @@ async function handleAddRack(e){
   document.getElementById('rack-foto-data').value = '';
   document.getElementById('rack-foto-preview').style.display = 'none';
   document.getElementById('rack-foto-preview').src = '';
+  document.getElementById('rack-pode-vendido').checked = false;
   showToast('Rack adicionado.');
   await loadRacks();
   return false;
@@ -1514,6 +1554,16 @@ async function deleteRack(id){
   const { error } = await supabaseClient.from('racks').delete().eq('id', id);
   if (error){ showToast('Erro ao remover rack.'); return; }
   showToast('Rack removido.');
+  await loadRacks();
+}
+
+async function toggleAtivoRack(id){
+  const original = myRacks.find(r => r.id === id);
+  if (!original) return;
+  const novoAtivo = !(original.ativo !== false);
+  const { error } = await supabaseClient.from('racks').update({ ativo: novoAtivo }).eq('id', id);
+  if (error){ showToast('Erro ao atualizar rack.'); return; }
+  showToast(novoAtivo ? 'Rack ativado.' : 'Rack inativado.');
   await loadRacks();
 }
 
@@ -1530,6 +1580,7 @@ async function duplicarRack(id){
     valor: original.valor,
     moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
+    pode_vendido: false,
   });
 
   if (error){ showToast('Erro ao duplicar rack.'); return; }
@@ -2087,11 +2138,22 @@ function escapeHtml(str){
   return div.innerHTML;
 }
 
+// Reserva no <main> exatamente a altura real do cabeçalho fixo (que pode variar,
+// por exemplo se o selo de usuário quebrar linha em telas estreitas)
+function ajustarEspacoCabecalho(){
+  const header = document.querySelector('.app-header');
+  const main = document.querySelector('main');
+  if (header && main) main.style.paddingTop = (header.offsetHeight + 20) + 'px';
+}
+window.addEventListener('resize', ajustarEspacoCabecalho);
+
 /* ---------------- Sessão existente ---------------- */
 (async function init(){
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session?.user){
     await onAuthReady(session.user);
+    ajustarEspacoCabecalho();
+    setTimeout(ajustarEspacoCabecalho, 300); // reajusta depois que as fontes terminarem de carregar
   }
 })();
 </script>
