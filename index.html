@@ -697,7 +697,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v44';
+const APP_VERSION = 'v45';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1238,7 +1238,7 @@ function renderMiners(){
       m.ativo === false ? '<span class="tag-off">Inativo</span>' : '',
       m.usar_rack === false ? '<span class="tag-off">Fora do rack</span>' : '',
       m.usar_cb === false ? '<span class="tag-off">Fora do custo-benefício</span>' : '',
-      m.pode_vendido ? '<span class="tag-venda">À venda</span>' : ''
+      m.pode_vendido ? '<span class="tag-venda">Pode ser Vendido</span>' : ''
     ].filter(Boolean).join(' ');
     return `
     <div class="miner-row">
@@ -1457,7 +1457,7 @@ function renderRacks(){
         </div>
       `;
     }
-    const tagOff = (r.ativo === false ? '<span class="tag-off">Inativo</span>' : '') + (r.pode_vendido ? ' <span class="tag-venda">À venda</span>' : '');
+    const tagOff = (r.ativo === false ? '<span class="tag-off">Inativo</span>' : '') + (r.pode_vendido ? ' <span class="tag-venda">Pode ser Vendido</span>' : '');
     return `
     <div class="miner-row">
       <div class="miner-info">
