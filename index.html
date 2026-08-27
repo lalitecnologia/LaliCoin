@@ -697,7 +697,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v45';
+const APP_VERSION = 'v46';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1991,6 +1991,7 @@ function calcularMelhorRack(){
         <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
         <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
         <div class="stat">Poder + bônus <b>${poderComBonus(m)}</b></div>
+        <div class="stat">${m.pode_vendido ? 'PV' : 'NPV'}</div>
       </div>`;
     const celulaVazia = (numSlot) => `
       <div class="slot-cell vazio">SLOT ${numSlot} · vazio</div>`;
@@ -2012,6 +2013,7 @@ function calcularMelhorRack(){
                   <div class="stat">Poder <b>${fmtNum(p.a.poder)} ${p.a.unidade || 'H/s'}</b></div>
                   <div class="stat">Bônus <b>${fmtNum(p.a.bonus)}%</b></div>
                   <div class="stat">Poder + bônus <b>${poderComBonus(p.a)}</b></div>
+                  <div class="stat">${p.a.pode_vendido ? 'PV' : 'NPV'}</div>
                 </div>
               ` : p.tipo === 'dupla' ? `
                 ${celulaMiner(p.a, p.inicio)}
