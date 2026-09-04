@@ -801,7 +801,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v47';
+const APP_VERSION = 'v49';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1446,11 +1446,31 @@ async function onAuthReady(user){
   let { data: profile, error } = await supabaseClient
     .from('profiles').select('*').eq('id', user.id).maybeSingle();
 
+  if (error){
+    // nunca tratar uma falha de leitura (RLS mal configurada, rede, etc.) como se o usuário
+    // fosse um cadastro pendente — isso travaria até o Criador. Avisa e volta pro login.
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = 'Não foi possível carregar seu perfil agora (' + error.message + '). Tente novamente.';
+    errEl.style.display = 'block';
+    await supabaseClient.auth.signOut();
+    currentUser = null;
+    return;
+  }
+
   if (!profile){
-    const { data: created } = await supabaseClient
+    const { data: created, error: errCreate } = await supabaseClient
       .from('profiles')
       .insert({ id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email, cpf: user.user_metadata?.cpf || null, tipo: 'U', liberado: false })
       .select().maybeSingle();
+
+    if (errCreate){
+      const errEl = document.getElementById('login-error');
+      errEl.textContent = 'Não foi possível criar seu perfil agora (' + errCreate.message + ').';
+      errEl.style.display = 'block';
+      await supabaseClient.auth.signOut();
+      currentUser = null;
+      return;
+    }
     profile = created;
   }
   currentProfile = profile;
@@ -2261,19 +2281,19 @@ function montarRackGreedy(minersDisponiveis, capacidade){
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
-  // índice do rack: capacidade (em slots) convertida pra um poder de referência (1 PH/s por slot)
-  // multiplicado pelo bônus do rack — assim um rack de 6 slots com 22% de bônus pode ser priorizado
-  // na frente de um rack de 8 slots com 20%, se o índice dele for maior (e vice-versa)
-  const indiceRackFn = (r) => {
-    const capacidade = Number(r.slots) || 4;
-    const poderPadraoPorSlot = paraHs(1, 'PH/s');
-    return capacidade * poderPadraoPorSlot * (1 + Number(r.bonus) / 100);
-  };
-
+  // O que maximiza o poder total combinado NÃO é a capacidade do rack, e sim o bônus dele:
+  // o bônus é um multiplicador aplicado sobre o poder de quem for colocado ali dentro, então
+  // o ganho absoluto é maior quando os melhores mineradores (maior poder+bônus) vão pro rack de
+  // maior bônus — não importa se esse rack é pequeno ou grande. Prova rápida (efeito de troca):
+  // dados dois racks com bônus b1 > b2, e dois grupos de mineradores com poder p1 > p2, colocar
+  // p1 no rack de bônus b1 sempre resulta em soma total maior ou igual à alternativa, porque
+  // p1*b1 + p2*b2 - (p1*b2 + p2*b1) = (p1-p2)*(b1-b2) ≥ 0. Por isso a ordem de prioridade dos
+  // racks pro cálculo de distribuição é simplesmente o bônus do rack, do maior pro menor —
+  // a capacidade (slots) só entra como critério de desempate.
   const racksAtivos = myRacks.filter(r => r.ativo !== false).sort((a, b) => {
-    const indiceDiff = indiceRackFn(b) - indiceRackFn(a);
-    if (indiceDiff !== 0) return indiceDiff;
-    return (Number(b.slots) || 4) - (Number(a.slots) || 4); // empatou no índice: o rack com mais slots vem primeiro
+    const bonusDiff = Number(b.bonus) - Number(a.bonus);
+    if (bonusDiff !== 0) return bonusDiff;
+    return (Number(b.slots) || 4) - (Number(a.slots) || 4); // empatou no bônus: o rack com mais slots vem primeiro
   });
   if (!racksAtivos.length){
     box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "ativo") pelo menos um rack na aba Rack.</div></div>`;
@@ -2341,11 +2361,11 @@ function calcularMelhorRack(){
 
   const resumoPrioridade = `
     <div class="card">
-      <div class="section-title">Ordem de prioridade dos racks (maior índice primeiro)</div>
+      <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
       ${racksAtivos.map((r, i) => `
         <div class="alt-item">
-          <div class="names">${i + 1}. ${escapeHtml(r.nome)} (${r.slots || 4} slots · ${fmtNum(r.bonus)}%)</div>
-          <div class="score">${formatarPoder(indiceRackFn(r))}</div>
+          <div class="names">${i + 1}. ${escapeHtml(r.nome)} (${r.slots || 4} slots)</div>
+          <div class="score">${fmtNum(r.bonus)}%</div>
         </div>
       `).join('')}
     </div>
