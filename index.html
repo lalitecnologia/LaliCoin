@@ -1816,36 +1816,60 @@ function combinacoes(arr, k){
   return resultado;
 }
 
-// Monta o preenchimento de um rack de forma gulosa e direta: percorre a lista de mineradores
-// (já ordenada do maior poder+bônus pro menor) e vai encaixando cada um no primeiro espaço
-// físico disponível — respeitando 1 ou 2 slots por minerador e nunca repetindo o mesmo nome
-// duas vezes no mesmo rack. Miners de 2 slots só podem ocupar uma prateleira inteira e vazia.
-function montarRackGreedy(minersOrdenados, capacidade){
+// Monta o preenchimento de um rack comparando o valor de cada PRATELEIRA (não de cada
+// minerador isolado): um minerador de 2 slots ocupa uma prateleira inteira sozinho, e dois
+// mineradores de 1 slot juntos também ocupam uma prateleira inteira — então antes de decidir
+// a ordem, somamos o poder+bônus dos dois mineradores de 1 slot (os melhores disponíveis, em
+// pares) e comparamos esse total com o poder+bônus de cada minerador de 2 slots. A prateleira
+// de maior valor combinado é preenchida primeiro, e assim por diante até a capacidade do rack.
+function montarRackGreedy(minersDisponiveis, capacidade){
+  const numPrateleiras = Math.ceil(capacidade / 2);
   const slots = new Array(capacidade).fill(null);
   const escolhidos = [];
 
-  for (const m of minersOrdenados){
-    const custo = Number(m.slots_ocupados) || 1;
+  // minersDisponiveis já chega ordenado do maior poder+bônus pro menor
+  const duplos = minersDisponiveis.filter(m => (Number(m.slots_ocupados) || 1) >= 2);
+  const simples = minersDisponiveis.filter(m => (Number(m.slots_ocupados) || 1) < 2);
 
-    if (custo >= 2){
-      // precisa de uma prateleira inteira livre (par de slots vazios, alinhado à prateleira)
-      let posicao = -1;
-      for (let i = 0; i < capacidade; i += 2){
-        const livre1 = slots[i] === null;
-        const livre2 = (i + 1 >= capacidade) || slots[i + 1] === null;
-        if (livre1 && livre2){ posicao = i; break; }
-      }
-      if (posicao === -1) continue; // não sobrou prateleira inteira pra esse minerador
-      slots[posicao] = m;
-      if (posicao + 1 < capacidade) slots[posicao + 1] = m;
+  // cada minerador de 2 slots é uma opção de prateleira sozinho; cada par de mineradores de
+  // 1 slot (os melhores primeiro) também é uma opção — se sobrar um sozinho, ele ocupa a
+  // prateleira sozinho (deixando a outra metade vazia)
+  const opcoes = [];
+  for (const m of duplos){
+    opcoes.push({ valor: scoreMiner(m), miners: [m] });
+  }
+  for (let i = 0; i < simples.length; i += 2){
+    const a = simples[i];
+    const b = simples[i + 1];
+    opcoes.push(b
+      ? { valor: scoreMiner(a) + scoreMiner(b), miners: [a, b] }
+      : { valor: scoreMiner(a), miners: [a] });
+  }
+
+  // ordena as opções de prateleira pelo valor combinado, maior pra menor
+  opcoes.sort((x, y) => y.valor - x.valor);
+
+  let prateleiraAtual = 0;
+  for (const op of opcoes){
+    if (prateleiraAtual >= numPrateleiras) break;
+    const posicao = prateleiraAtual * 2;
+    const ehDuplo = op.miners.length === 1 && (Number(op.miners[0].slots_ocupados) || 1) >= 2;
+
+    if (op.miners.length === 2){
+      // dois mineradores de 1 slot dividindo a prateleira
+      slots[posicao] = op.miners[0];
+      if (posicao + 1 < capacidade) slots[posicao + 1] = op.miners[1];
+    } else if (ehDuplo){
+      // minerador de 2 slots ocupando a prateleira inteira
+      slots[posicao] = op.miners[0];
+      if (posicao + 1 < capacidade) slots[posicao + 1] = op.miners[0];
     } else {
-      // precisa só de 1 slot livre, qualquer um
-      const posicao = slots.findIndex(s => s === null);
-      if (posicao === -1) continue;
-      slots[posicao] = m;
+      // sobrou um único minerador de 1 slot sozinho na prateleira
+      slots[posicao] = op.miners[0];
     }
 
-    escolhidos.push(m);
+    escolhidos.push(...op.miners);
+    prateleiraAtual++;
   }
 
   return { slots, escolhidos };
