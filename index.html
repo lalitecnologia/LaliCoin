@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#0B0E14;
@@ -278,6 +279,38 @@
     font-size:9px; color:var(--success); border:1px solid var(--success); border-radius:100px;
     padding:2px 7px; text-transform:uppercase; letter-spacing:0.04em;
   }
+
+  /* ---------- Usuários (admin) / Planos / Pix ---------- */
+  .tab-badge{
+    background:var(--danger); color:#fff; font-size:9px; font-weight:700;
+    border-radius:100px; padding:1px 6px; line-height:1.5;
+  }
+  .plano-card{
+    border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:10px;
+    background:var(--surface-2); display:flex; justify-content:space-between; align-items:center;
+  }
+  .plano-card .plano-nome{font-weight:600; font-size:14px;}
+  .plano-card .plano-preco{font-family:'JetBrains Mono'; color:var(--gold); font-size:18px; font-weight:700; text-align:right;}
+  .plano-card .plano-preco span{display:block; font-size:10px; color:var(--muted); font-weight:400;}
+  .pix-box{text-align:center; padding:6px 0 0;}
+  .pix-box > div{display:flex; justify-content:center; margin-bottom:12px;}
+  .pix-box img, .pix-box canvas{background:#fff; padding:10px; border-radius:12px;}
+  .pix-copia{
+    width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:8px;
+    padding:10px; font-family:'JetBrains Mono'; font-size:11px; color:var(--text);
+    word-break:break-all; margin-bottom:10px; text-align:left;
+  }
+  .usuario-row{padding:14px 0; border-bottom:1px solid var(--border);}
+  .usuario-row:last-child{border-bottom:none;}
+  .usuario-row .top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;}
+  .usuario-row .nome{font-weight:600; font-size:14px;}
+  .usuario-row .email{font-size:11px; color:var(--muted); font-family:'JetBrains Mono'; margin-top:2px;}
+  .status-pill{
+    font-size:10px; padding:3px 9px; border-radius:100px; font-family:'JetBrains Mono';
+    text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap;
+  }
+  .status-pill.pendente{color:var(--danger); border:1px solid var(--danger); background:rgba(225,85,74,0.1);}
+  .status-pill.liberado{color:var(--success); border:1px solid var(--success); background:rgba(76,175,109,0.1);}
   .counter-badge{
     display:inline-flex; align-items:center; justify-content:center;
     min-width:20px; height:20px; padding:0 6px; margin-left:6px;
@@ -374,9 +407,26 @@
       </div>
       <button type="submit" class="btn btn-primary">Criar conta</button>
       <div class="error-msg" id="signup-error"></div>
-      <p class="hint">Novas contas entram como usuário padrão (U).</p>
+      <p class="hint">Novas contas entram como usuário padrão (U) e ficam pendentes de liberação até a confirmação do pagamento do plano escolhido.</p>
     </form>
     <div class="version-tag" id="version-tag-auth"></div>
+  </div>
+</div>
+
+<!-- ================= PENDENTE DE LIBERAÇÃO ================= -->
+<div id="pending-screen" style="display:none; min-height:100vh; flex-direction:column; align-items:center; padding:28px;">
+  <div class="auth-box" style="max-width:420px; padding-top:12px;">
+    <div class="auth-hero">
+      <div class="coin">LC</div>
+      <h1>Cadastro recebido</h1>
+      <p>
+        Seu acesso ao LaliCoin está pendente de liberação. Assim que o pagamento do plano
+        escolhido for confirmado, o Criador libera seu uso e você entra normalmente.
+      </p>
+    </div>
+    <div id="pending-planos"></div>
+    <button type="button" class="btn btn-ghost" onclick="handleLogout()" style="margin-top:6px;">Sair</button>
+    <div class="version-tag" id="version-tag-pending"></div>
   </div>
 </div>
 
@@ -419,6 +469,9 @@
       </button>
       <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
         <span class="ic">◎</span>Perfil
+      </button>
+      <button class="tab-btn" data-screen="usuarios" id="tab-usuarios" onclick="switchScreen('usuarios')" style="display:none;">
+        <span class="ic">👥</span>Usuários<span class="tab-badge" id="badge-usuarios" style="display:none; margin-left:4px;"></span>
       </button>
       <button class="tab-btn" data-screen="configuracao" onclick="switchScreen('configuracao')">
         <span class="ic">⚙</span>Configuração
@@ -661,6 +714,18 @@
       <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
     </section>
 
+    <!-- USUÁRIOS (somente Criador) -->
+    <section id="screen-usuarios" class="screen">
+      <div class="card">
+        <div class="section-title">Todos os usuários</div>
+        <p class="hint" style="margin-bottom:10px; text-align:left;">
+          Como Criador, você pode ver e alterar os dados de qualquer usuário aqui, incluindo liberar
+          o acesso de quem acabou de se cadastrar. Usuários comuns só veem e alteram o próprio perfil.
+        </p>
+        <div id="usuarios-list"></div>
+      </div>
+    </section>
+
     <!-- CONFIGURAÇÃO -->
     <section id="screen-configuracao" class="screen">
       <div class="card">
@@ -687,6 +752,45 @@
           </button>
         </div>
       </div>
+
+      <div class="card" id="config-planos-card" style="display:none;">
+        <div class="section-title">Planos e pagamento (somente Criador)</div>
+        <p class="hint" style="margin-bottom:14px; text-align:left;">
+          Esses valores e a chave Pix aparecem pra qualquer usuário novo na tela de cadastro
+          pendente de liberação. Altere aqui sempre que precisar — nada fica fixo no código.
+        </p>
+        <div class="field">
+          <label>Valor mensal (R$)</label>
+          <input type="number" id="config-valor-mensal" step="0.01" min="0" placeholder="10.00">
+        </div>
+        <div class="field">
+          <label>Valor trimestral (R$)</label>
+          <input type="number" id="config-valor-trimestral" step="0.01" min="0" placeholder="25.00">
+        </div>
+        <div class="field">
+          <label>Valor anual (R$)</label>
+          <input type="number" id="config-valor-anual" step="0.01" min="0" placeholder="40.00">
+        </div>
+        <div class="field">
+          <label>Chave Pix</label>
+          <input type="text" id="config-chave-pix" placeholder="CPF, e-mail, telefone ou chave aleatória">
+        </div>
+        <div class="field">
+          <label>Nome do recebedor (aparece no Pix)</label>
+          <input type="text" id="config-nome-recebedor" maxlength="25" placeholder="Ex: Lali Tecnologia">
+        </div>
+        <div class="field">
+          <label>Cidade do recebedor (aparece no Pix)</label>
+          <input type="text" id="config-cidade-recebedor" maxlength="15" placeholder="Ex: Piracicaba">
+        </div>
+        <button type="button" class="btn btn-primary" onclick="salvarConfiguracoes()">Salvar configuração de planos</button>
+        <div class="error-msg" id="config-planos-error"></div>
+      </div>
+
+      <div class="card" id="config-planos-preview-card" style="display:none;">
+        <div class="section-title">Pré-visualização (o que o usuário pendente vê)</div>
+        <div id="config-planos-preview"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -697,7 +801,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v46';
+const APP_VERSION = 'v47';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -712,6 +816,8 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 
 let currentUser = null;
 let currentProfile = null;
+let currentConfig = null;
+let allProfiles = [];
 let myMiners = [];
 let myRacks = [];
 
@@ -922,6 +1028,251 @@ function switchAuthTab(tab){
 }
 
 /* ---------------- Login ---------------- */
+/* ---------------- Configuração de planos / Pix (só Criador altera) ---------------- */
+async function carregarConfiguracoes(){
+  const { data } = await supabaseClient.from('configuracoes').select('*').eq('id', 1).maybeSingle();
+  currentConfig = data || { valor_mensal: 10, valor_trimestral: 25, valor_anual: 40, chave_pix: '', nome_recebedor: '', cidade_recebedor: '' };
+}
+
+function preencherFormConfiguracoes(){
+  const c = currentConfig || {};
+  document.getElementById('config-valor-mensal').value = c.valor_mensal ?? 10;
+  document.getElementById('config-valor-trimestral').value = c.valor_trimestral ?? 25;
+  document.getElementById('config-valor-anual').value = c.valor_anual ?? 40;
+  document.getElementById('config-chave-pix').value = c.chave_pix || '';
+  document.getElementById('config-nome-recebedor').value = c.nome_recebedor || '';
+  document.getElementById('config-cidade-recebedor').value = c.cidade_recebedor || '';
+  document.getElementById('config-planos-preview-card').style.display = 'block';
+  renderPlanos('config-planos-preview');
+}
+
+async function salvarConfiguracoes(){
+  const errEl = document.getElementById('config-planos-error');
+  errEl.style.display = 'none';
+
+  const valor_mensal = parseFloat(document.getElementById('config-valor-mensal').value);
+  const valor_trimestral = parseFloat(document.getElementById('config-valor-trimestral').value);
+  const valor_anual = parseFloat(document.getElementById('config-valor-anual').value);
+  const chave_pix = document.getElementById('config-chave-pix').value.trim();
+  const nome_recebedor = document.getElementById('config-nome-recebedor').value.trim();
+  const cidade_recebedor = document.getElementById('config-cidade-recebedor').value.trim();
+
+  if (isNaN(valor_mensal) || isNaN(valor_trimestral) || isNaN(valor_anual) || valor_mensal < 0 || valor_trimestral < 0 || valor_anual < 0){
+    errEl.textContent = 'Preencha os três valores de plano corretamente.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const { error } = await supabaseClient.from('configuracoes')
+    .update({
+      valor_mensal, valor_trimestral, valor_anual,
+      chave_pix: chave_pix || null, nome_recebedor: nome_recebedor || null, cidade_recebedor: cidade_recebedor || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', 1);
+
+  if (error){
+    errEl.textContent = 'Erro ao salvar: ' + error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  currentConfig = { ...currentConfig, valor_mensal, valor_trimestral, valor_anual, chave_pix, nome_recebedor, cidade_recebedor };
+  showToast('Configuração de planos salva.');
+  renderPlanos('config-planos-preview');
+}
+
+function fmtMoeda(v){
+  return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Gera o CRC16-CCITT (polinômio 0x1021, início 0xFFFF) exigido no final do payload Pix
+function crc16Pix(str){
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++){
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++){
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+      crc &= 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+function campoEmvPix(id, valor){
+  return id + String(valor.length).padStart(2, '0') + valor;
+}
+
+function removerAcentos(txt){
+  return (txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Monta o payload padrão "Pix Copia e Cola" (BR Code / EMV) a partir da chave configurada —
+// sem valor fixo, pra servir pra qualquer um dos três planos
+function gerarPayloadPix(){
+  const c = currentConfig || {};
+  if (!c.chave_pix) return '';
+
+  const chave = c.chave_pix.trim();
+  const nome = removerAcentos(c.nome_recebedor || 'LALICOIN').toUpperCase().slice(0, 25) || 'LALICOIN';
+  const cidade = removerAcentos(c.cidade_recebedor || 'SAO PAULO').toUpperCase().slice(0, 15) || 'SAO PAULO';
+
+  const merchantAccountInfo = campoEmvPix('00', 'br.gov.bcb.pix') + campoEmvPix('01', chave);
+  let payload =
+    campoEmvPix('00', '01') +
+    campoEmvPix('26', merchantAccountInfo) +
+    campoEmvPix('52', '0000') +
+    campoEmvPix('53', '986') +
+    campoEmvPix('58', 'BR') +
+    campoEmvPix('59', nome) +
+    campoEmvPix('60', cidade) +
+    campoEmvPix('62', campoEmvPix('05', '***'));
+
+  payload += '6304';
+  return payload + crc16Pix(payload);
+}
+
+function copiarPixCode(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent)
+    .then(() => showToast('Código Pix copiado.'))
+    .catch(() => showToast('Não foi possível copiar automaticamente — selecione e copie manualmente.'));
+}
+
+// Renderiza os 3 planos + QR code do Pix dentro do elemento com o id informado —
+// usado tanto na tela de cadastro pendente quanto na pré-visualização da Configuração
+function renderPlanos(containerId){
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const c = currentConfig || {};
+  const payload = gerarPayloadPix();
+  const qrId = containerId + '-qrcode';
+  const copiaId = containerId + '-copia';
+
+  box.innerHTML = `
+    <div class="card">
+      <div class="section-title">Planos</div>
+      <div class="plano-card">
+        <div class="plano-nome">Mensal</div>
+        <div class="plano-preco">R$ ${fmtMoeda(c.valor_mensal ?? 10)}<span>por mês</span></div>
+      </div>
+      <div class="plano-card">
+        <div class="plano-nome">Trimestral</div>
+        <div class="plano-preco">R$ ${fmtMoeda(c.valor_trimestral ?? 25)}<span>por trimestre</span></div>
+      </div>
+      <div class="plano-card">
+        <div class="plano-nome">Anual</div>
+        <div class="plano-preco">R$ ${fmtMoeda(c.valor_anual ?? 40)}<span>por ano</span></div>
+      </div>
+      <p class="hint" style="text-align:left; margin-top:4px;">
+        As atualizações do aplicativo estão inclusas em qualquer um dos planos e são feitas de
+        forma contínua, sem aviso prévio, sempre com o objetivo de melhoria contínua.
+      </p>
+    </div>
+    <div class="card">
+      <div class="section-title">Pagamento via Pix</div>
+      <div class="pix-box">
+        <div id="${qrId}"></div>
+        ${payload ? `
+          <div class="pix-copia" id="${copiaId}">${escapeHtml(payload)}</div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="copiarPixCode('${copiaId}')">Copiar código Pix</button>
+        ` : `<p class="hint">Chave Pix ainda não configurada pelo Criador.</p>`}
+      </div>
+    </div>
+  `;
+
+  if (payload && window.QRCode){
+    new QRCode(document.getElementById(qrId), {
+      text: payload, width: 180, height: 180, colorDark: '#0B0E14', colorLight: '#FFFFFF',
+    });
+  }
+}
+
+/* ---------------- Usuários (painel do Criador) ---------------- */
+async function loadUsuarios(){
+  const { data, error } = await supabaseClient.from('profiles').select('*').order('nome', { ascending: true });
+  allProfiles = data || [];
+
+  const pendentes = allProfiles.filter(p => p.tipo !== 'C' && p.liberado !== true);
+  const badge = document.getElementById('badge-usuarios');
+  if (pendentes.length){
+    badge.textContent = pendentes.length;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+
+  renderUsuarios();
+  return pendentes.length;
+}
+
+function renderUsuarios(){
+  const list = document.getElementById('usuarios-list');
+  if (!list) return;
+
+  if (!allProfiles.length){
+    list.innerHTML = '<div class="empty-state">Nenhum usuário cadastrado ainda.</div>';
+    return;
+  }
+
+  list.innerHTML = allProfiles.map(p => {
+    const pendente = p.tipo !== 'C' && p.liberado !== true;
+    return `
+      <div class="usuario-row">
+        <div class="top">
+          <div>
+            <div class="nome">${escapeHtml(p.nome || p.email || '—')}</div>
+            <div class="email">${escapeHtml(p.email || '')}</div>
+          </div>
+          <span class="status-pill ${pendente ? 'pendente' : 'liberado'}">${pendente ? 'Pendente' : 'Liberado'}</span>
+        </div>
+        <div class="field">
+          <label>Nome</label>
+          <input type="text" id="usr-nome-${p.id}" value="${escapeHtml(p.nome || '')}">
+        </div>
+        <div class="field">
+          <label>CPF</label>
+          <input type="text" id="usr-cpf-${p.id}" value="${formatarCpf(p.cpf) || ''}" maxlength="14" inputmode="numeric" oninput="mascaraCpf(this)">
+        </div>
+        <div class="field">
+          <label>Tipo de conta</label>
+          <select id="usr-tipo-${p.id}">
+            <option value="U" ${p.tipo !== 'C' ? 'selected' : ''}>Usuário (U)</option>
+            <option value="C" ${p.tipo === 'C' ? 'selected' : ''}>Criador (C)</option>
+          </select>
+        </div>
+        <label class="check-line">
+          <input type="checkbox" id="usr-liberado-${p.id}" ${p.liberado ? 'checked' : ''}> Acesso liberado
+        </label>
+        <button type="button" class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="salvarUsuario('${p.id}')">Salvar</button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function salvarUsuario(id){
+  const nome = document.getElementById(`usr-nome-${id}`).value.trim();
+  const cpf = document.getElementById(`usr-cpf-${id}`).value.replace(/\D/g, '');
+  const tipo = document.getElementById(`usr-tipo-${id}`).value;
+  const liberado = document.getElementById(`usr-liberado-${id}`).checked;
+
+  if (cpf && !validarCpf(cpf)){
+    showToast('CPF inválido para este usuário.');
+    return;
+  }
+
+  const { error } = await supabaseClient.from('profiles')
+    .update({ nome, cpf: cpf || null, tipo, liberado }).eq('id', id);
+
+  if (error){ showToast('Erro ao salvar usuário: ' + error.message); return; }
+
+  showToast('Usuário atualizado.');
+  if (id === currentUser?.id){
+    currentProfile = { ...currentProfile, nome, cpf, tipo, liberado };
+  }
+  await loadUsuarios();
+}
+
 async function handleLogin(e){
   e.preventDefault();
   const email = document.getElementById('login-email').value.trim();
@@ -1082,6 +1433,7 @@ async function handleLogout(){
   await supabaseClient.auth.signOut();
   currentUser = null; currentProfile = null; myMiners = [];
   document.getElementById('app').classList.remove('active');
+  document.getElementById('pending-screen').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'flex';
 }
 
@@ -1089,24 +1441,39 @@ async function handleLogout(){
 async function onAuthReady(user){
   currentUser = user;
 
-  // busca (ou cria) o perfil do usuário
+  // busca (ou cria) o perfil do usuário — contas novas entram travadas (liberado:false)
+  // até o Criador liberar o uso na aba Usuários
   let { data: profile, error } = await supabaseClient
     .from('profiles').select('*').eq('id', user.id).maybeSingle();
 
   if (!profile){
     const { data: created } = await supabaseClient
       .from('profiles')
-      .insert({ id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email, cpf: user.user_metadata?.cpf || null, tipo: 'U' })
+      .insert({ id: user.id, email: user.email, nome: user.user_metadata?.nome || user.email, cpf: user.user_metadata?.cpf || null, tipo: 'U', liberado: false })
       .select().maybeSingle();
     profile = created;
   }
   currentProfile = profile;
 
+  await carregarConfiguracoes();
+
+  const isCreator = profile?.tipo === 'C';
+  const liberado = isCreator || profile?.liberado === true;
+
   document.getElementById('auth-screen').style.display = 'none';
+
+  if (!liberado){
+    // conta ainda não liberada: mostra a tela de planos/pix em vez do app
+    document.getElementById('app').classList.remove('active');
+    document.getElementById('pending-screen').style.display = 'flex';
+    renderPlanos('pending-planos');
+    return;
+  }
+
+  document.getElementById('pending-screen').style.display = 'none';
   document.getElementById('app').classList.add('active');
 
   const pill = document.getElementById('role-pill');
-  const isCreator = profile?.tipo === 'C';
   pill.textContent = isCreator ? 'Criador' : 'Usuário';
   pill.classList.toggle('creator', isCreator);
 
@@ -1123,6 +1490,18 @@ async function onAuthReady(user){
     document.getElementById('perfil-tipo-texto').textContent = 'Usuário (U)';
   }
 
+  // painel de Usuários e configuração de planos: só aparecem pro Criador
+  document.getElementById('tab-usuarios').style.display = isCreator ? 'flex' : 'none';
+  document.getElementById('config-planos-card').style.display = isCreator ? 'block' : 'none';
+
+  if (isCreator){
+    preencherFormConfiguracoes();
+    const pendentes = await loadUsuarios();
+    if (pendentes > 0){
+      showToast(`Há ${pendentes} cadastro(s) pendente(s) de liberação.`);
+    }
+  }
+
   popularSelectsMoeda();
   aplicarTema(profile?.tema || 'escuro');
   await loadMiners();
@@ -1135,6 +1514,10 @@ function switchScreen(name){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
+
+  if (name === 'usuarios'){
+    loadUsuarios();
+  }
 
   if (name === 'calculo'){
     // busca miners e racks direto do banco antes de calcular, pra nunca ficar com dados
