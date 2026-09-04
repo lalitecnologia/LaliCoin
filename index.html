@@ -1374,12 +1374,12 @@ async function duplicarMiner(id){
     poder_hs: original.poder_hs,
     bonus: original.bonus,
     slots_ocupados: original.slots_ocupados ?? 1,
-    valor: 0,
+    valor: original.valor,
     moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
     usar_rack: original.usar_rack !== false,
     usar_cb: original.usar_cb !== false,
-    pode_vendido: false,
+    pode_vendido: original.pode_vendido === true,
   });
 
   if (error){ showToast('Erro ao duplicar minerador.'); return; }
@@ -1573,14 +1573,14 @@ async function duplicarRack(id){
 
   const { error } = await supabaseClient.from('racks').insert({
     user_id: currentUser.id,
-    nome: original.nome + ' (cópia)',
+    nome: original.nome,
     foto: original.foto || null,
     bonus: original.bonus,
     slots: original.slots ?? 4,
     valor: original.valor,
     moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
-    pode_vendido: false,
+    pode_vendido: original.pode_vendido === true,
   });
 
   if (error){ showToast('Erro ao duplicar rack.'); return; }
@@ -1854,10 +1854,19 @@ function montarRackGreedy(minersOrdenados, capacidade){
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
+  // índice do rack: capacidade (em slots) convertida pra um poder de referência (1 PH/s por slot)
+  // multiplicado pelo bônus do rack — assim um rack de 6 slots com 22% de bônus pode ser priorizado
+  // na frente de um rack de 8 slots com 20%, se o índice dele for maior (e vice-versa)
+  const indiceRackFn = (r) => {
+    const capacidade = Number(r.slots) || 4;
+    const poderPadraoPorSlot = paraHs(1, 'PH/s');
+    return capacidade * poderPadraoPorSlot * (1 + Number(r.bonus) / 100);
+  };
+
   const racksAtivos = myRacks.filter(r => r.ativo !== false).sort((a, b) => {
-    const bonusDiff = Number(b.bonus) - Number(a.bonus);
-    if (bonusDiff !== 0) return bonusDiff;
-    return (Number(b.slots) || 4) - (Number(a.slots) || 4); // empatou no bônus: o rack com mais slots vem primeiro
+    const indiceDiff = indiceRackFn(b) - indiceRackFn(a);
+    if (indiceDiff !== 0) return indiceDiff;
+    return (Number(b.slots) || 4) - (Number(a.slots) || 4); // empatou no índice: o rack com mais slots vem primeiro
   });
   if (!racksAtivos.length){
     box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "ativo") pelo menos um rack na aba Rack.</div></div>`;
@@ -1925,11 +1934,11 @@ function calcularMelhorRack(){
 
   const resumoPrioridade = `
     <div class="card">
-      <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
+      <div class="section-title">Ordem de prioridade dos racks (maior índice primeiro)</div>
       ${racksAtivos.map((r, i) => `
         <div class="alt-item">
-          <div class="names">${i + 1}. ${escapeHtml(r.nome)} (${r.slots || 4} slots)</div>
-          <div class="score">${fmtNum(r.bonus)}%</div>
+          <div class="names">${i + 1}. ${escapeHtml(r.nome)} (${r.slots || 4} slots · ${fmtNum(r.bonus)}%)</div>
+          <div class="score">${formatarPoder(indiceRackFn(r))}</div>
         </div>
       `).join('')}
     </div>
@@ -1939,8 +1948,14 @@ function calcularMelhorRack(){
     ? ` · ${fmtValorCompleto(rack.valor)} ${rack.moeda || 'RLT'}`
     : '';
 
+  const RACKS_POR_SALA = 12;
+
   box.innerHTML = resumoGeral + resumoPrioridade + resultadosPorRack.map((item, indiceRack) => {
-    const prefixoSala = `Sala 1 / Rack ${indiceRack + 1} - `;
+    // distribui os racks em salas de 12: os primeiros 12 (por prioridade) vão pra Sala 1,
+    // os próximos 12 pra Sala 2, e assim por diante
+    const numeroSala = Math.floor(indiceRack / RACKS_POR_SALA) + 1;
+    const rackNaSala = (indiceRack % RACKS_POR_SALA) + 1;
+    const prefixoSala = `Sala ${numeroSala} / Rack ${rackNaSala} - `;
     if (item.insuficiente){
       return `
         <div class="card">
