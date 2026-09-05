@@ -801,7 +801,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v49';
+const APP_VERSION = 'v50';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2460,6 +2460,9 @@ function calcularMelhorRack(){
               ` : p.tipo === 'dupla' ? `
                 ${celulaMiner(p.a, p.inicio)}
                 ${celulaMiner(p.b, p.fim)}
+                <div class="stat" style="grid-column:1 / -1; text-align:center; padding-top:4px; border-top:1px dashed var(--border); margin-top:2px;">
+                  Soma da prateleira (poder + bônus de cada um) <b>${formatarPoder(scoreMiner(p.a) + scoreMiner(p.b))}</b>
+                </div>
               ` : p.tipo === 'parcial' ? `
                 ${celulaMiner(p.a, p.inicio)}
                 ${celulaVazia(p.fim)}
