@@ -801,7 +801,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v50';
+const APP_VERSION = 'v52';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -913,6 +913,19 @@ function formatarPoder(valorHs){
 function formatarPoderEm(valorHs, unidade){
   const fator = UNIDADES_FATOR[unidade] || 1;
   return (valorHs / fator).toLocaleString('pt-BR', {maximumFractionDigits:3}) + ' ' + unidade;
+}
+
+// Começa numa unidade mínima (ex: a predominante do combo), mas sobe pra unidade seguinte
+// sempre que o valor alcançar 1000 nessa unidade — ex: 1000 PH/s vira 1 EH/s — em vez de ficar
+// preso na unidade predominante e mostrar números como "3.675,184 PH/s"
+function formatarPoderDesde(valorHs, unidadeMinima){
+  const ordem = Object.keys(UNIDADES_FATOR); // H/s, kH/s, MH/s, GH/s, TH/s, PH/s, EH/s, ZH/s
+  let indice = ordem.indexOf(unidadeMinima);
+  if (indice === -1) indice = 0;
+  while (indice < ordem.length - 1 && (valorHs / UNIDADES_FATOR[ordem[indice]]) >= 1000){
+    indice++;
+  }
+  return formatarPoderEm(valorHs, ordem[indice]);
 }
 
 // Formata um número simples no padrão brasileiro (vírgula decimal)
@@ -1534,6 +1547,12 @@ function switchScreen(name){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === name));
+
+  // sempre volta pro topo ao trocar de aba, senão quem está no final de uma lista longa
+  // (miners, racks, etc.) fica preso lá embaixo na tela seguinte
+  window.scrollTo(0, 0);
+  const mainEl = document.querySelector('main');
+  if (mainEl) mainEl.scrollTop = 0;
 
   if (name === 'usuarios'){
     loadUsuarios();
@@ -2475,7 +2494,7 @@ function calcularMelhorRack(){
         </div>
         <div class="result-summary">
           <div class="metric">
-            <div class="val">${formatarPoderEm(r.poderTotal, r.unidadeRef)}</div>
+            <div class="val">${formatarPoderDesde(r.poderTotal, r.unidadeRef)}</div>
             <div class="lbl">Poder total</div>
           </div>
           <div class="metric">
@@ -2483,7 +2502,7 @@ function calcularMelhorRack(){
             <div class="lbl">Bônus total (miners + rack)</div>
           </div>
           <div class="metric">
-            <div class="val">${formatarPoderEm(r.valorFinal, r.unidadeRef)}</div>
+            <div class="val">${formatarPoderDesde(r.valorFinal, r.unidadeRef)}</div>
             <div class="lbl">Valor final</div>
           </div>
         </div>
