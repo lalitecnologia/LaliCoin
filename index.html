@@ -95,6 +95,8 @@
     font-family:'JetBrains Mono'; text-transform:uppercase; letter-spacing:0.06em;
   }
   .role-pill.creator{color:var(--gold); border-color:var(--gold-dim); background:rgba(232,185,62,0.08);}
+  .role-pill.plano-free{color:var(--teal); border-color:var(--teal); background:rgba(62,198,192,0.08);}
+  .role-pill.plano-pago{color:var(--success); border-color:var(--success); background:rgba(76,175,109,0.08);}
 
   main{flex:1; padding:20px; padding-bottom:32px; max-width:820px; width:100%; margin:0 auto;}
   .screen{display:none; animation:fade .25s ease;}
@@ -462,9 +464,11 @@
       <h1>Cadastro recebido</h1>
       <p>
         Seu acesso ao LaliCoin está pendente de liberação. Assim que o pagamento do plano
-        escolhido for confirmado, o Criador libera seu uso e você entra normalmente.
+        escolhido for confirmado, o Criador libera seu uso e você entra normalmente —
+        ou comece agora mesmo com o período de teste grátis abaixo.
       </p>
     </div>
+    <div id="pending-trial"></div>
     <div id="pending-planos"></div>
     <button type="button" class="btn btn-ghost" onclick="handleLogout()" style="margin-top:6px;">Sair</button>
     <div class="version-tag" id="version-tag-pending"></div>
@@ -481,6 +485,7 @@
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
         <span class="version-tag-top" id="version-tag-app"></span>
+        <span class="role-pill" id="plano-pill" style="display:none;"></span>
         <span class="role-pill" id="role-pill">U</span>
         <button class="icon-btn" onclick="handleLogout()" title="Sair">⏻</button>
       </div>
@@ -835,6 +840,10 @@
           pendente de liberação. Altere aqui sempre que precisar — nada fica fixo no código.
         </p>
         <div class="field">
+          <label>Dias de teste grátis (plano Free)</label>
+          <input type="number" id="config-dias-trial" step="1" min="1" placeholder="7">
+        </div>
+        <div class="field">
           <label>Valor mensal (R$)</label>
           <input type="number" id="config-valor-mensal" step="0.01" min="0" placeholder="10.00">
         </div>
@@ -876,7 +885,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v53';
+const APP_VERSION = 'v54';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1229,11 +1238,12 @@ function switchAuthTab(tab){
 /* ---------------- Configuração de planos / Pix (só Criador altera) ---------------- */
 async function carregarConfiguracoes(){
   const { data } = await supabaseClient.from('configuracoes').select('*').eq('id', 1).maybeSingle();
-  currentConfig = data || { valor_mensal: 10, valor_trimestral: 25, valor_anual: 40, chave_pix: '', nome_recebedor: '', cidade_recebedor: '' };
+  currentConfig = data || { valor_mensal: 10, valor_trimestral: 25, valor_anual: 40, chave_pix: '', nome_recebedor: '', cidade_recebedor: '', dias_trial_free: 7 };
 }
 
 function preencherFormConfiguracoes(){
   const c = currentConfig || {};
+  document.getElementById('config-dias-trial').value = c.dias_trial_free ?? 7;
   document.getElementById('config-valor-mensal').value = c.valor_mensal ?? 10;
   document.getElementById('config-valor-trimestral').value = c.valor_trimestral ?? 25;
   document.getElementById('config-valor-anual').value = c.valor_anual ?? 40;
@@ -1248,12 +1258,19 @@ async function salvarConfiguracoes(){
   const errEl = document.getElementById('config-planos-error');
   errEl.style.display = 'none';
 
+  const dias_trial_free = parseInt(document.getElementById('config-dias-trial').value, 10);
   const valor_mensal = parseFloat(document.getElementById('config-valor-mensal').value);
   const valor_trimestral = parseFloat(document.getElementById('config-valor-trimestral').value);
   const valor_anual = parseFloat(document.getElementById('config-valor-anual').value);
   const chave_pix = document.getElementById('config-chave-pix').value.trim();
   const nome_recebedor = document.getElementById('config-nome-recebedor').value.trim();
   const cidade_recebedor = document.getElementById('config-cidade-recebedor').value.trim();
+
+  if (isNaN(dias_trial_free) || dias_trial_free < 1){
+    errEl.textContent = 'Informe um número válido de dias de teste grátis (mínimo 1).';
+    errEl.style.display = 'block';
+    return;
+  }
 
   if (isNaN(valor_mensal) || isNaN(valor_trimestral) || isNaN(valor_anual) || valor_mensal < 0 || valor_trimestral < 0 || valor_anual < 0){
     errEl.textContent = 'Preencha os três valores de plano corretamente.';
@@ -1263,7 +1280,7 @@ async function salvarConfiguracoes(){
 
   const { error } = await supabaseClient.from('configuracoes')
     .update({
-      valor_mensal, valor_trimestral, valor_anual,
+      dias_trial_free, valor_mensal, valor_trimestral, valor_anual,
       chave_pix: chave_pix || null, nome_recebedor: nome_recebedor || null, cidade_recebedor: cidade_recebedor || null,
       updated_at: new Date().toISOString(),
     }).eq('id', 1);
@@ -1274,7 +1291,7 @@ async function salvarConfiguracoes(){
     return;
   }
 
-  currentConfig = { ...currentConfig, valor_mensal, valor_trimestral, valor_anual, chave_pix, nome_recebedor, cidade_recebedor };
+  currentConfig = { ...currentConfig, dias_trial_free, valor_mensal, valor_trimestral, valor_anual, chave_pix, nome_recebedor, cidade_recebedor };
   showToast('Configuração de planos salva.');
   renderPlanos('config-planos-preview');
 }
@@ -1386,6 +1403,51 @@ function renderPlanos(containerId){
   }
 }
 
+// Renderiza o card "usar grátis" na tela de cadastro pendente — só aparece se o usuário
+// ainda não tiver usado o período de teste (trial_fim nunca foi definido no perfil dele)
+function renderTrialGratis(){
+  const box = document.getElementById('pending-trial');
+  if (!box) return;
+
+  const dias = currentConfig?.dias_trial_free ?? 7;
+  const diasTxt = dias === 1 ? '1 dia' : `${dias} dias`;
+  const jaUsouTrial = !!currentProfile?.trial_fim;
+
+  box.innerHTML = jaUsouTrial ? `
+    <div class="card">
+      <p class="hint" style="margin-top:0;">Seu período de teste grátis já foi utilizado. Escolha um dos planos abaixo para continuar.</p>
+    </div>
+  ` : `
+    <div class="card">
+      <div class="section-title">Ou comece agora</div>
+      <p class="hint" style="text-align:left; margin-top:0;">
+        Experimente o LaliCoin de graça por ${diasTxt} antes de escolher um plano pago.
+      </p>
+      <button type="button" class="btn btn-primary" onclick="ativarTrialGratis()">Usar grátis por ${diasTxt}</button>
+    </div>
+  `;
+}
+
+// Ativa o período grátis: libera o acesso imediatamente e marca o plano como "free",
+// com validade de tantos dias quanto configurado pelo Criador (dias_trial_free)
+async function ativarTrialGratis(){
+  if (!currentUser || currentProfile?.trial_fim) return;
+
+  const dias = currentConfig?.dias_trial_free ?? 7;
+  const trial_fim = new Date(Date.now() + dias * 24 * 60 * 60 * 1000).toISOString();
+
+  const { error } = await supabaseClient.from('profiles')
+    .update({ liberado: true, plano: 'free', trial_fim }).eq('id', currentUser.id);
+
+  if (error){
+    showToast('Não foi possível ativar o período grátis: ' + error.message);
+    return;
+  }
+
+  showToast(`Período grátis de ${dias === 1 ? '1 dia' : dias + ' dias'} ativado.`);
+  await onAuthReady(currentUser);
+}
+
 /* ---------------- Usuários (painel do Criador) ---------------- */
 async function loadUsuarios(){
   const { data, error } = await supabaseClient.from('profiles').select('*').order('nome', { ascending: true });
@@ -1415,6 +1477,10 @@ function renderUsuarios(){
 
   list.innerHTML = allProfiles.map(p => {
     const pendente = p.tipo !== 'C' && p.liberado !== true;
+    const trialInfo = p.trial_fim ? `
+      <p class="hint" style="text-align:left; margin-top:-6px; margin-bottom:12px;">
+        Teste grátis ${new Date(p.trial_fim) > new Date() ? 'expira em ' : 'expirou em '}${new Date(p.trial_fim).toLocaleDateString('pt-BR')}
+      </p>` : '';
     return `
       <div class="usuario-row">
         <div class="top">
@@ -1424,6 +1490,7 @@ function renderUsuarios(){
           </div>
           <span class="status-pill ${pendente ? 'pendente' : 'liberado'}">${pendente ? 'Pendente' : 'Liberado'}</span>
         </div>
+        ${trialInfo}
         <div class="field">
           <label>Nome</label>
           <input type="text" id="usr-nome-${p.id}" value="${escapeHtml(p.nome || '')}">
@@ -1439,6 +1506,16 @@ function renderUsuarios(){
             <option value="C" ${p.tipo === 'C' ? 'selected' : ''}>Criador (C)</option>
           </select>
         </div>
+        <div class="field">
+          <label>Plano</label>
+          <select id="usr-plano-${p.id}">
+            <option value="" ${!p.plano ? 'selected' : ''}>Sem plano</option>
+            <option value="free" ${p.plano === 'free' ? 'selected' : ''}>Free</option>
+            <option value="mensal" ${p.plano === 'mensal' ? 'selected' : ''}>Mensal</option>
+            <option value="trimestral" ${p.plano === 'trimestral' ? 'selected' : ''}>Trimestral</option>
+            <option value="anual" ${p.plano === 'anual' ? 'selected' : ''}>Anual</option>
+          </select>
+        </div>
         <label class="check-line">
           <input type="checkbox" id="usr-liberado-${p.id}" ${p.liberado ? 'checked' : ''}> Acesso liberado
         </label>
@@ -1452,6 +1529,7 @@ async function salvarUsuario(id){
   const nome = document.getElementById(`usr-nome-${id}`).value.trim();
   const cpf = document.getElementById(`usr-cpf-${id}`).value.replace(/\D/g, '');
   const tipo = document.getElementById(`usr-tipo-${id}`).value;
+  const plano = document.getElementById(`usr-plano-${id}`).value || null;
   const liberado = document.getElementById(`usr-liberado-${id}`).checked;
 
   if (cpf && !validarCpf(cpf)){
@@ -1460,13 +1538,14 @@ async function salvarUsuario(id){
   }
 
   const { error } = await supabaseClient.from('profiles')
-    .update({ nome, cpf: cpf || null, tipo, liberado }).eq('id', id);
+    .update({ nome, cpf: cpf || null, tipo, plano, liberado }).eq('id', id);
 
   if (error){ showToast('Erro ao salvar usuário: ' + error.message); return; }
 
   showToast('Usuário atualizado.');
   if (id === currentUser?.id){
-    currentProfile = { ...currentProfile, nome, cpf, tipo, liberado };
+    currentProfile = { ...currentProfile, nome, cpf, tipo, plano, liberado };
+    atualizarPlanoPill(currentProfile, tipo === 'C');
   }
   await loadUsuarios();
 }
@@ -1626,6 +1705,32 @@ async function handleSalvarPerfil(e){
   return false;
 }
 
+// Atualiza o selo de plano no topo do app — mostra "Free" (com dias restantes) para quem
+// está no teste grátis, o nome do plano pago para quem já foi liberado com um plano definido,
+// e fica oculto para o Criador ou para quem ainda não tem plano registrado
+function atualizarPlanoPill(profile, isCreator){
+  const pill = document.getElementById('plano-pill');
+  if (!pill) return;
+
+  if (isCreator || !profile?.plano){
+    pill.style.display = 'none';
+    return;
+  }
+
+  const nomes = { free: 'Free', mensal: 'Mensal', trimestral: 'Trimestral', anual: 'Anual' };
+  let texto = nomes[profile.plano] || profile.plano;
+
+  if (profile.plano === 'free' && profile.trial_fim){
+    const diasRestantes = Math.max(0, Math.ceil((new Date(profile.trial_fim) - new Date()) / 86400000));
+    texto += ` · ${diasRestantes}d`;
+  }
+
+  pill.textContent = texto;
+  pill.style.display = 'inline-block';
+  pill.classList.toggle('plano-free', profile.plano === 'free');
+  pill.classList.toggle('plano-pago', profile.plano !== 'free');
+}
+
 /* ---------------- Logout ---------------- */
 async function handleLogout(){
   await supabaseClient.auth.signOut();
@@ -1675,16 +1780,25 @@ async function onAuthReady(user){
 
   await carregarConfiguracoes();
 
+  // teste grátis expirado: revoga o acesso e volta pra tela de cadastro pendente — o
+  // usuário não pode ativar o Free de novo (trial_fim já preenchido), só escolher um plano pago
+  if (profile?.plano === 'free' && profile?.liberado === true && profile?.trial_fim && new Date(profile.trial_fim) <= new Date()){
+    await supabaseClient.from('profiles').update({ liberado: false }).eq('id', profile.id);
+    profile = { ...profile, liberado: false };
+    currentProfile = profile;
+  }
+
   const isCreator = profile?.tipo === 'C';
   const liberado = isCreator || profile?.liberado === true;
 
   document.getElementById('auth-screen').style.display = 'none';
 
   if (!liberado){
-    // conta ainda não liberada: mostra a tela de planos/pix em vez do app
+    // conta ainda não liberada: mostra a tela de planos/pix (e a opção de teste grátis) em vez do app
     document.getElementById('app').classList.remove('active');
     document.getElementById('pending-screen').style.display = 'flex';
     renderPlanos('pending-planos');
+    renderTrialGratis();
     return;
   }
 
@@ -1694,6 +1808,7 @@ async function onAuthReady(user){
   const pill = document.getElementById('role-pill');
   pill.textContent = isCreator ? 'Criador' : 'Usuário';
   pill.classList.toggle('creator', isCreator);
+  atualizarPlanoPill(profile, isCreator);
 
   document.getElementById('perfil-nome').value = profile?.nome || '';
   document.getElementById('perfil-email').value = user.email || '';
