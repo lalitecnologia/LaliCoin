@@ -492,11 +492,17 @@
     </div>
 
     <nav class="top-tabs">
-      <button class="tab-btn active" data-screen="miners" onclick="switchScreen('miners')">
-        <span class="ic">⛏</span>Miners
+      <button class="tab-btn active" data-screen="catalogo-miners" id="tab-catalogo-miners" onclick="switchScreen('catalogo-miners')">
+        <span class="ic">📋</span>Cadastro Miners
+      </button>
+      <button class="tab-btn" data-screen="catalogo-racks" id="tab-catalogo-racks" onclick="switchScreen('catalogo-racks')">
+        <span class="ic">🗄</span>Cadastro Racks
+      </button>
+      <button class="tab-btn" data-screen="miners" onclick="switchScreen('miners')">
+        <span class="ic">⛏</span>Meus Miners
       </button>
       <button class="tab-btn" data-screen="rack" onclick="switchScreen('rack')">
-        <span class="ic">▤</span>Racks
+        <span class="ic">▤</span>Meus Racks
       </button>
       <button class="tab-btn" data-screen="melhorminer" onclick="switchScreen('melhorminer')">
         <span class="ic">★</span>Melhor Miner
@@ -526,37 +532,34 @@
   </div>
 
   <main>
-    <!-- MINERS -->
-    <section id="screen-miners" class="screen active">
+    <!-- CADASTRO GLOBAL DE MINERS -->
+    <section id="screen-catalogo-miners" class="screen active">
       <div class="card">
-        <div class="section-title">Cadastrar minerador</div>
-        <form onsubmit="return handleAddMiner(event)">
+        <div class="section-title">Cadastrar minerador (catálogo global)</div>
+        <p class="hint" style="text-align:left; margin-top:0;">
+          Este cadastro é <b>compartilhado entre todos os usuários</b> — cada nome só existe uma vez aqui.
+          Depois de cadastrado, qualquer usuário pode vincular este item em "Meus Miners". Para alterar
+          poder, bônus, imagem etc. de um item já existente, edite-o aqui — a alteração vale pra todo
+          mundo que já vinculou esse minerador.
+        </p>
+        <form onsubmit="return handleAddCatalogoMiner(event)">
           <div class="field">
             <label>Nome do minerador</label>
-            <input type="text" id="miner-nome" required placeholder="Ex: ShaleRig III" onblur="verificarImagemExistente('miner', 'miner-nome', 'miner-foto-preview', 'miner-foto-data')">
+            <input type="text" id="cat-miner-nome" required placeholder="Ex: ShaleRig III">
           </div>
           <div class="field">
             <label>Foto do minerador</label>
-            <div class="img-hint">
-              As imagens são compartilhadas entre todos os usuários e <b>únicas por nome</b> — não
-              é possível ter duas imagens diferentes pro mesmo nome. Cadastre o nome exatamente
-              como aparece no RollerCoin (respeitando maiúsculas/minúsculas), incluindo o nível
-              quando houver. <b>Exemplo Miner: ShaleRig III</b>. Se já existir uma imagem pra esse
-              nome, ela é carregada automaticamente ao sair do campo Nome — só envie uma nova se
-              ainda não existir.
-            </div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <img id="miner-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'miner-foto-preview', 'miner-foto-data')">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="abrirBuscaImagem('miner', {tipo:'miner', previewId:'miner-foto-preview', dataId:'miner-foto-data'})">Buscar imagem cadastrada</button>
+              <img id="cat-miner-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-miner-foto-preview', 'cat-miner-foto-data')">
             </div>
-            <input type="hidden" id="miner-foto-data">
+            <input type="hidden" id="cat-miner-foto-data">
           </div>
           <div class="field">
             <label>Poder</label>
             <div style="display:flex; gap:8px;">
-              <input type="number" id="miner-poder" required step="any" min="0" placeholder="Ex: 1500" style="flex:2;">
-              <select id="miner-unidade" style="flex:1;">
+              <input type="number" id="cat-miner-poder" required step="any" min="0" placeholder="Ex: 1500" style="flex:2;">
+              <select id="cat-miner-unidade" style="flex:1;">
                 <option value="H/s">H/s</option>
                 <option value="kH/s">kH/s</option>
                 <option value="MH/s">MH/s</option>
@@ -570,11 +573,111 @@
           </div>
           <div class="field">
             <label>Bônus (%)</label>
-            <input type="number" id="miner-bonus" required step="any" min="0" placeholder="Ex: 12.5">
+            <input type="number" id="cat-miner-bonus" required step="any" min="0" placeholder="Ex: 12.5">
           </div>
           <div class="field">
             <label>Slots ocupados no rack</label>
-            <input type="number" id="miner-slots-ocupados" required step="1" min="1" value="2" placeholder="Ex: 2">
+            <input type="number" id="cat-miner-slots" required step="1" min="1" value="2" placeholder="Ex: 2">
+          </div>
+          <div class="field">
+            <label class="check-line"><input type="checkbox" id="cat-miner-pode-vendido"> Pode ser vendido</label>
+          </div>
+          <button type="submit" class="btn btn-primary">Cadastrar minerador no catálogo</button>
+          <div class="error-msg" id="cat-miner-error"></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Miners cadastrados <span id="contador-catalogo-miners" class="counter-badge">0</span></div>
+        <input type="text" id="cat-miner-busca" placeholder="Buscar pelo nome..." oninput="renderCatalogoMiners()" style="margin-bottom:12px;">
+        <div id="catalogo-miners-list"><div class="empty-state">Nenhum minerador cadastrado ainda.</div></div>
+      </div>
+    </section>
+
+    <!-- CADASTRO GLOBAL DE RACKS -->
+    <section id="screen-catalogo-racks" class="screen">
+      <div class="card">
+        <div class="section-title">Cadastrar rack (catálogo global)</div>
+        <p class="hint" style="text-align:left; margin-top:0;">
+          Este cadastro é <b>compartilhado entre todos os usuários</b> — cada nome só existe uma vez aqui.
+          Depois de cadastrado, qualquer usuário pode vincular este item em "Meus Racks". Para alterar
+          bônus, imagem etc. de um item já existente, edite-o aqui — a alteração vale pra todo mundo
+          que já vinculou esse rack.
+        </p>
+        <form onsubmit="return handleAddCatalogoRack(event)">
+          <div class="field">
+            <label>Nome do rack</label>
+            <input type="text" id="cat-rack-nome" required placeholder="Ex: Regular Rack 8">
+          </div>
+          <div class="field">
+            <label>Foto do rack</label>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <img id="cat-rack-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-rack-foto-preview', 'cat-rack-foto-data')">
+            </div>
+            <input type="hidden" id="cat-rack-foto-data">
+          </div>
+          <div class="field">
+            <label>Número de slots</label>
+            <select id="cat-rack-slots" required>
+              <option value="6">6</option>
+              <option value="8" selected>8</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Bônus (%)</label>
+            <input type="number" id="cat-rack-bonus" required step="any" min="0" placeholder="Ex: 8">
+          </div>
+          <div class="field">
+            <label class="check-line"><input type="checkbox" id="cat-rack-pode-vendido"> Pode ser vendido</label>
+          </div>
+          <button type="submit" class="btn btn-primary">Cadastrar rack no catálogo</button>
+          <div class="error-msg" id="cat-rack-error"></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Racks cadastrados <span id="contador-catalogo-racks" class="counter-badge">0</span></div>
+        <input type="text" id="cat-rack-busca" placeholder="Buscar pelo nome..." oninput="renderCatalogoRacks()" style="margin-bottom:12px;">
+        <div id="catalogo-racks-list"><div class="empty-state">Nenhum rack cadastrado ainda.</div></div>
+      </div>
+    </section>
+
+    <!-- MINERS -->
+    <section id="screen-miners" class="screen">
+      <div class="card">
+        <div class="section-title">Vincular minerador</div>
+        <p class="hint" style="text-align:left; margin-top:0;">
+          Escolha um minerador já cadastrado no catálogo global. Nome, imagem, poder, bônus, slots e se
+          pode ser vendido vêm de lá — pra alterar isso, edite o item em "Cadastro Miners".
+        </p>
+        <form onsubmit="return handleAddMiner(event)">
+          <div class="field">
+            <label>Minerador do catálogo</label>
+            <select id="miner-catalogo-id" required onchange="atualizarPreviewMeuMiner()">
+              <option value="">Selecione um minerador...</option>
+            </select>
+          </div>
+          <div id="miner-preview-catalogo" style="display:none;">
+            <div class="field">
+              <label>Foto</label>
+              <img id="miner-preview-foto" src="" alt="" class="miner-thumb">
+            </div>
+            <div class="field">
+              <label>Poder</label>
+              <input type="text" id="miner-preview-poder" disabled>
+            </div>
+            <div class="field">
+              <label>Bônus (%)</label>
+              <input type="text" id="miner-preview-bonus" disabled>
+            </div>
+            <div class="field">
+              <label>Slots ocupados no rack</label>
+              <input type="text" id="miner-preview-slots" disabled>
+            </div>
+            <div class="field">
+              <label class="check-line"><input type="checkbox" id="miner-preview-pode-vendido" disabled> Pode ser vendido</label>
+            </div>
           </div>
           <div class="field">
             <label>Valor pago</label>
@@ -596,52 +699,49 @@
             <label class="check-line"><input type="checkbox" id="miner-ativo" checked> Minerador ativo</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-rack" checked> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="miner-usar-cb" checked> Considerar no cálculo de custo-benefício</label>
-            <label class="check-line"><input type="checkbox" id="miner-pode-vendido"> Pode ser vendido</label>
           </div>
-          <button type="submit" class="btn btn-primary">Adicionar minerador</button>
+          <button type="submit" class="btn btn-primary">Adicionar aos meus miners</button>
+          <div class="error-msg" id="miner-error"></div>
         </form>
       </div>
 
       <div class="card">
-        <div class="section-title">Seus mineradores <span id="contador-miners" class="counter-badge">0</span></div>
-        <div id="miners-list"><div class="empty-state">Nenhum minerador cadastrado ainda.</div></div>
+        <div class="section-title">Meus miners <span id="contador-miners" class="counter-badge">0</span></div>
+        <div id="miners-list"><div class="empty-state">Nenhum minerador vinculado ainda.</div></div>
       </div>
     </section>
 
     <!-- RACK -->
     <section id="screen-rack" class="screen">
       <div class="card">
-        <div class="section-title">Cadastrar rack</div>
-
+        <div class="section-title">Vincular rack</div>
+        <p class="hint" style="text-align:left; margin-top:0;">
+          Escolha um rack já cadastrado no catálogo global. Nome, imagem, slots, bônus e se pode ser
+          vendido vêm de lá — pra alterar isso, edite o item em "Cadastro Racks".
+        </p>
         <form onsubmit="return handleAddRack(event)">
           <div class="field">
-            <label>Nome do rack</label>
-            <input type="text" id="rack-nome" required placeholder="Ex: Regular Rack 8" onblur="verificarImagemExistente('rack', 'rack-nome', 'rack-foto-preview', 'rack-foto-data')">
+            <label>Rack do catálogo</label>
+            <select id="rack-catalogo-id" required onchange="atualizarPreviewMeuRack()">
+              <option value="">Selecione um rack...</option>
+            </select>
           </div>
-          <div class="field">
-            <label>Foto do rack</label>
-            <div class="img-hint">
-              As imagens são compartilhadas entre todos os usuários e <b>únicas por nome</b> — não
-              é possível ter duas imagens diferentes pro mesmo nome. Cadastre o nome exatamente
-              como aparece no RollerCoin (respeitando maiúsculas/minúsculas), incluindo a
-              quantidade de slots no nome. <b>Exemplo Rack: Regular Rack 8</b>. Se já existir uma
-              imagem pra esse nome, ela é carregada automaticamente ao sair do campo Nome — só
-              envie uma nova se ainda não existir.
+          <div id="rack-preview-catalogo" style="display:none;">
+            <div class="field">
+              <label>Foto</label>
+              <img id="rack-preview-foto" src="" alt="" class="miner-thumb">
             </div>
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <img id="rack-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'rack-foto-preview', 'rack-foto-data')">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="abrirBuscaImagem('rack', {tipo:'rack', previewId:'rack-foto-preview', dataId:'rack-foto-data'})">Buscar imagem cadastrada</button>
+            <div class="field">
+              <label>Número de slots</label>
+              <input type="text" id="rack-preview-slots" disabled>
             </div>
-            <input type="hidden" id="rack-foto-data">
-          </div>
-          <div class="field">
-            <label>Bônus (%)</label>
-            <input type="number" id="rack-bonus" required step="any" min="0" placeholder="Ex: 8">
-          </div>
-          <div class="field">
-            <label>Número de slots</label>
-            <input type="number" id="rack-slots" required step="1" min="1" value="4" placeholder="Ex: 4">
+            <div class="field">
+              <label>Bônus (%)</label>
+              <input type="text" id="rack-preview-bonus" disabled>
+            </div>
+            <div class="field">
+              <label class="check-line"><input type="checkbox" id="rack-preview-pode-vendido" disabled> Pode ser vendido</label>
+            </div>
           </div>
           <div class="field">
             <label>Valor pago</label>
@@ -661,15 +761,15 @@
           </div>
           <div class="field">
             <label class="check-line"><input type="checkbox" id="rack-ativo" checked> Rack ativo</label>
-            <label class="check-line"><input type="checkbox" id="rack-pode-vendido"> Pode ser vendido</label>
           </div>
-          <button type="submit" class="btn btn-primary">Adicionar rack</button>
+          <button type="submit" class="btn btn-primary">Adicionar aos meus racks</button>
+          <div class="error-msg" id="rack-error"></div>
         </form>
       </div>
 
       <div class="card">
-        <div class="section-title">Seus racks <span id="contador-racks" class="counter-badge">0</span></div>
-        <div id="racks-list"><div class="empty-state">Nenhum rack cadastrado ainda.</div></div>
+        <div class="section-title">Meus racks <span id="contador-racks" class="counter-badge">0</span></div>
+        <div id="racks-list"><div class="empty-state">Nenhum rack vinculado ainda.</div></div>
       </div>
     </section>
 
@@ -871,6 +971,19 @@
         <div class="error-msg" id="config-planos-error"></div>
       </div>
 
+      <div class="card" id="config-permissoes-card" style="display:none;">
+        <div class="section-title">Permissões de cadastro (somente Criador)</div>
+        <p class="hint" style="margin-bottom:14px; text-align:left;">
+          Controla se usuários comuns podem cadastrar itens no catálogo global de Miners e Racks.
+          O Criador sempre tem acesso, independente dessa configuração.
+        </p>
+        <div class="field">
+          <label class="check-line"><input type="checkbox" id="config-permitir-catalogo-miners" checked> Usuários podem cadastrar no catálogo de Miners</label>
+          <label class="check-line"><input type="checkbox" id="config-permitir-catalogo-racks" checked> Usuários podem cadastrar no catálogo de Racks</label>
+        </div>
+        <button type="button" class="btn btn-primary" onclick="salvarConfiguracoes()">Salvar permissões</button>
+      </div>
+
       <div class="card" id="config-planos-preview-card" style="display:none;">
         <div class="section-title">Pré-visualização (o que o usuário pendente vê)</div>
         <div id="config-planos-preview"></div>
@@ -885,7 +998,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v54';
+const APP_VERSION = 'v55';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -904,6 +1017,26 @@ let currentConfig = null;
 let allProfiles = [];
 let myMiners = [];
 let myRacks = [];
+let catalogoMiners = [];
+let catalogoRacks = [];
+
+// Mostra/esconde as abas "Cadastro Miners" / "Cadastro Racks" conforme a permissão que o
+// Criador definiu na configuração — o Criador sempre enxerga as duas, independente do flag
+function atualizarVisibilidadeAbasCatalogo(isCreator){
+  const permMiners = isCreator || currentConfig?.permitir_catalogo_miners !== false;
+  const permRacks = isCreator || currentConfig?.permitir_catalogo_racks !== false;
+
+  const tabMiners = document.getElementById('tab-catalogo-miners');
+  const tabRacks = document.getElementById('tab-catalogo-racks');
+  if (tabMiners) tabMiners.style.display = permMiners ? 'flex' : 'none';
+  if (tabRacks) tabRacks.style.display = permRacks ? 'flex' : 'none';
+
+  // se o usuário estava numa aba de catálogo que acabou de ficar bloqueada, manda pra "Meus Miners"
+  const ativa = document.querySelector('.tab-btn.active')?.dataset.screen;
+  if ((ativa === 'catalogo-miners' && !permMiners) || (ativa === 'catalogo-racks' && !permRacks)){
+    switchScreen('miners');
+  }
+}
 
 /* ---------------- Unidades de poder ---------------- */
 const UNIDADES_FATOR = {
@@ -1238,7 +1371,7 @@ function switchAuthTab(tab){
 /* ---------------- Configuração de planos / Pix (só Criador altera) ---------------- */
 async function carregarConfiguracoes(){
   const { data } = await supabaseClient.from('configuracoes').select('*').eq('id', 1).maybeSingle();
-  currentConfig = data || { valor_mensal: 10, valor_trimestral: 25, valor_anual: 40, chave_pix: '', nome_recebedor: '', cidade_recebedor: '', dias_trial_free: 7 };
+  currentConfig = data || { valor_mensal: 10, valor_trimestral: 25, valor_anual: 40, chave_pix: '', nome_recebedor: '', cidade_recebedor: '', dias_trial_free: 7, permitir_catalogo_miners: true, permitir_catalogo_racks: true };
 }
 
 function preencherFormConfiguracoes(){
@@ -1250,6 +1383,8 @@ function preencherFormConfiguracoes(){
   document.getElementById('config-chave-pix').value = c.chave_pix || '';
   document.getElementById('config-nome-recebedor').value = c.nome_recebedor || '';
   document.getElementById('config-cidade-recebedor').value = c.cidade_recebedor || '';
+  document.getElementById('config-permitir-catalogo-miners').checked = c.permitir_catalogo_miners !== false;
+  document.getElementById('config-permitir-catalogo-racks').checked = c.permitir_catalogo_racks !== false;
   document.getElementById('config-planos-preview-card').style.display = 'block';
   renderPlanos('config-planos-preview');
 }
@@ -1265,6 +1400,8 @@ async function salvarConfiguracoes(){
   const chave_pix = document.getElementById('config-chave-pix').value.trim();
   const nome_recebedor = document.getElementById('config-nome-recebedor').value.trim();
   const cidade_recebedor = document.getElementById('config-cidade-recebedor').value.trim();
+  const permitir_catalogo_miners = document.getElementById('config-permitir-catalogo-miners').checked;
+  const permitir_catalogo_racks = document.getElementById('config-permitir-catalogo-racks').checked;
 
   if (isNaN(dias_trial_free) || dias_trial_free < 1){
     errEl.textContent = 'Informe um número válido de dias de teste grátis (mínimo 1).';
@@ -1282,6 +1419,7 @@ async function salvarConfiguracoes(){
     .update({
       dias_trial_free, valor_mensal, valor_trimestral, valor_anual,
       chave_pix: chave_pix || null, nome_recebedor: nome_recebedor || null, cidade_recebedor: cidade_recebedor || null,
+      permitir_catalogo_miners, permitir_catalogo_racks,
       updated_at: new Date().toISOString(),
     }).eq('id', 1);
 
@@ -1291,9 +1429,10 @@ async function salvarConfiguracoes(){
     return;
   }
 
-  currentConfig = { ...currentConfig, dias_trial_free, valor_mensal, valor_trimestral, valor_anual, chave_pix, nome_recebedor, cidade_recebedor };
-  showToast('Configuração de planos salva.');
+  currentConfig = { ...currentConfig, dias_trial_free, valor_mensal, valor_trimestral, valor_anual, chave_pix, nome_recebedor, cidade_recebedor, permitir_catalogo_miners, permitir_catalogo_racks };
+  showToast('Configuração salva.');
   renderPlanos('config-planos-preview');
+  atualizarVisibilidadeAbasCatalogo();
 }
 
 function fmtMoeda(v){
@@ -1809,6 +1948,7 @@ async function onAuthReady(user){
   pill.textContent = isCreator ? 'Criador' : 'Usuário';
   pill.classList.toggle('creator', isCreator);
   atualizarPlanoPill(profile, isCreator);
+  atualizarVisibilidadeAbasCatalogo(isCreator);
 
   document.getElementById('perfil-nome').value = profile?.nome || '';
   document.getElementById('perfil-email').value = user.email || '';
@@ -1826,6 +1966,7 @@ async function onAuthReady(user){
   // painel de Usuários e configuração de planos: só aparecem pro Criador
   document.getElementById('tab-usuarios').style.display = isCreator ? 'flex' : 'none';
   document.getElementById('config-planos-card').style.display = isCreator ? 'block' : 'none';
+  document.getElementById('config-permissoes-card').style.display = isCreator ? 'block' : 'none';
 
   if (isCreator){
     preencherFormConfiguracoes();
@@ -1837,6 +1978,8 @@ async function onAuthReady(user){
 
   popularSelectsMoeda();
   aplicarTema(profile?.tema || 'escuro');
+  await loadCatalogoMiners();
+  await loadCatalogoRacks();
   await loadMiners();
   await loadRacks();
   await loadAnotacoes();
@@ -1858,6 +2001,22 @@ function switchScreen(name){
     loadUsuarios();
   }
 
+  if (name === 'catalogo-miners'){
+    loadCatalogoMiners();
+  }
+
+  if (name === 'catalogo-racks'){
+    loadCatalogoRacks();
+  }
+
+  if (name === 'miners'){
+    loadCatalogoMiners().then(loadMiners);
+  }
+
+  if (name === 'rack'){
+    loadCatalogoRacks().then(loadRacks);
+  }
+
   if (name === 'calculo'){
     // busca miners e racks direto do banco antes de calcular, pra nunca ficar com dados
     // desatualizados (ex: um cadastro feito e ido direto pra essa aba, sem passar por outra tela)
@@ -1870,11 +2029,409 @@ function switchScreen(name){
   }
 }
 
-/* ---------------- Miners CRUD ---------------- */
+/* ---------------- Catálogo global de Miners (compartilhado) ---------------- */
+async function loadCatalogoMiners(){
+  const { data } = await supabaseClient.from('miners_catalogo').select('*').order('nome');
+  catalogoMiners = data || [];
+  renderCatalogoMiners();
+  popularSelectMeuMinerCatalogo();
+}
+
+let editingCatalogoMinerId = null;
+
+function popularSelectMeuMinerCatalogo(){
+  const sel = document.getElementById('miner-catalogo-id');
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Selecione um minerador...</option>' + catalogoMiners.map(c =>
+    `<option value="${c.id}">${escapeHtml(c.nome)} — ${fmtNum(c.poder)} ${c.unidade} · ${fmtNum(c.bonus)}% · ${c.slots_ocupados} slot(s)</option>`
+  ).join('');
+  sel.value = catalogoMiners.some(c => c.id === atual) ? atual : '';
+}
+
+function atualizarPreviewMeuMiner(){
+  const id = document.getElementById('miner-catalogo-id').value;
+  const box = document.getElementById('miner-preview-catalogo');
+  const c = catalogoMiners.find(x => x.id === id);
+  if (!c){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const foto = document.getElementById('miner-preview-foto');
+  foto.src = c.foto || ''; foto.style.display = c.foto ? 'block' : 'none';
+  document.getElementById('miner-preview-poder').value = fmtNum(c.poder) + ' ' + c.unidade;
+  document.getElementById('miner-preview-bonus').value = fmtNum(c.bonus) + '%';
+  document.getElementById('miner-preview-slots').value = c.slots_ocupados;
+  document.getElementById('miner-preview-pode-vendido').checked = c.pode_vendido === true;
+}
+
+function renderCatalogoMiners(){
+  const contador = document.getElementById('contador-catalogo-miners');
+  if (contador) contador.textContent = catalogoMiners.length;
+
+  const filtro = (document.getElementById('cat-miner-busca')?.value || '').trim().toLowerCase();
+  const lista = catalogoMiners.filter(c => c.nome.toLowerCase().includes(filtro));
+
+  const list = document.getElementById('catalogo-miners-list');
+  if (!lista.length){
+    list.innerHTML = '<div class="empty-state">Nenhum minerador encontrado.</div>';
+    return;
+  }
+  list.innerHTML = lista.map(c => {
+    if (c.id === editingCatalogoMinerId){
+      const opcoesUnidade = Object.keys(UNIDADES_FATOR).map(u =>
+        `<option value="${u}" ${u === (c.unidade || 'H/s') ? 'selected' : ''}>${u}</option>`
+      ).join('');
+      return `
+        <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div class="field" style="margin-bottom:0;">
+            <label>Foto</label>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img id="edit-cat-miner-foto-preview-${c.id}" src="${c.foto || ''}" alt="" class="miner-thumb" style="display:${c.foto ? 'block' : 'none'};">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-cat-miner-foto-preview-${c.id}', 'edit-cat-miner-foto-data-${c.id}')">
+            </div>
+            <input type="hidden" id="edit-cat-miner-foto-data-${c.id}" value="${c.foto || ''}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Nome</label>
+            <input type="text" id="edit-cat-miner-nome-${c.id}" value="${escapeHtml(c.nome)}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Poder</label>
+            <div style="display:flex; gap:8px;">
+              <input type="number" step="any" min="0" id="edit-cat-miner-poder-${c.id}" value="${c.poder}" style="flex:2;">
+              <select id="edit-cat-miner-unidade-${c.id}" style="flex:1;">${opcoesUnidade}</select>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Bônus (%)</label>
+            <input type="number" step="any" min="0" id="edit-cat-miner-bonus-${c.id}" value="${c.bonus}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Slots ocupados no rack</label>
+            <input type="number" step="1" min="1" id="edit-cat-miner-slots-${c.id}" value="${c.slots_ocupados}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="check-line"><input type="checkbox" id="edit-cat-miner-pode-vendido-${c.id}" ${c.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:4px;">
+            <button class="btn btn-primary btn-sm" style="flex:1;" onclick="salvarEdicaoCatalogoMiner('${c.id}')">Salvar</button>
+            <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="cancelarEdicaoCatalogoMiner()">Cancelar</button>
+          </div>
+        </div>
+      `;
+    }
+    return `
+    <div class="miner-row">
+      <div class="miner-info">
+        ${c.foto ? `<img src="${c.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">⛏</div>`}
+        <div class="miner-info-text">
+          <div class="name">${escapeHtml(c.nome)} ${c.pode_vendido ? '<span class="tag-venda">Pode ser Vendido</span>' : ''}</div>
+          <div class="stats">Poder: ${fmtNum(c.poder)} ${c.unidade || 'H/s'} · Bônus: ${fmtNum(c.bonus)}% · ${c.slots_ocupados ?? 1} slot(s)</div>
+        </div>
+      </div>
+      <div class="miner-actions">
+        <button class="icon-btn" onclick="startEdicaoCatalogoMiner('${c.id}')" title="Editar">✎</button>
+        <button class="icon-btn" onclick="excluirCatalogoMiner('${c.id}')" title="Remover">✕</button>
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+function startEdicaoCatalogoMiner(id){
+  editingCatalogoMinerId = id;
+  renderCatalogoMiners();
+}
+
+function cancelarEdicaoCatalogoMiner(){
+  editingCatalogoMinerId = null;
+  renderCatalogoMiners();
+}
+
+async function salvarEdicaoCatalogoMiner(id){
+  const nome = document.getElementById(`edit-cat-miner-nome-${id}`).value.trim();
+  const foto = document.getElementById(`edit-cat-miner-foto-data-${id}`).value || null;
+  const poder = parseFloat(document.getElementById(`edit-cat-miner-poder-${id}`).value);
+  const unidade = document.getElementById(`edit-cat-miner-unidade-${id}`).value;
+  const bonus = parseFloat(document.getElementById(`edit-cat-miner-bonus-${id}`).value);
+  const slots_ocupados = parseInt(document.getElementById(`edit-cat-miner-slots-${id}`).value, 10);
+  const pode_vendido = document.getElementById(`edit-cat-miner-pode-vendido-${id}`).checked;
+
+  if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(slots_ocupados) || slots_ocupados < 1){
+    showToast('Preencha todos os campos corretamente.');
+    return;
+  }
+  if (catalogoMiners.some(c => c.id !== id && chaveNome(c.nome) === chaveNome(nome))){
+    showToast('Já existe outro minerador cadastrado com esse nome.');
+    return;
+  }
+  const poder_hs = paraHs(poder, unidade);
+
+  const { error } = await supabaseClient
+    .from('miners_catalogo').update({ nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, pode_vendido }).eq('id', id);
+
+  if (error){ showToast('Erro ao salvar alterações.'); return; }
+  editingCatalogoMinerId = null;
+  showToast('Minerador do catálogo atualizado.');
+  await loadCatalogoMiners();
+  await loadMiners();
+}
+
+async function handleAddCatalogoMiner(e){
+  e.preventDefault();
+  const errEl = document.getElementById('cat-miner-error');
+  errEl.style.display = 'none';
+
+  const nome = document.getElementById('cat-miner-nome').value.trim();
+  const foto = document.getElementById('cat-miner-foto-data').value || null;
+  const poder = parseFloat(document.getElementById('cat-miner-poder').value);
+  const unidade = document.getElementById('cat-miner-unidade').value;
+  const bonus = parseFloat(document.getElementById('cat-miner-bonus').value);
+  const slots_ocupados = parseInt(document.getElementById('cat-miner-slots').value, 10);
+  const pode_vendido = document.getElementById('cat-miner-pode-vendido').checked;
+
+  if (catalogoMiners.some(c => chaveNome(c.nome) === chaveNome(nome))){
+    errEl.textContent = 'Já existe um minerador cadastrado com esse nome.';
+    errEl.style.display = 'block';
+    return false;
+  }
+  const poder_hs = paraHs(poder, unidade);
+
+  const { error } = await supabaseClient
+    .from('miners_catalogo').insert({ nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, pode_vendido, criado_por: currentUser.id });
+
+  if (error){
+    errEl.textContent = 'Erro ao cadastrar: ' + error.message;
+    errEl.style.display = 'block';
+    return false;
+  }
+  document.getElementById('cat-miner-nome').value = '';
+  document.getElementById('cat-miner-poder').value = '';
+  document.getElementById('cat-miner-bonus').value = '';
+  document.getElementById('cat-miner-slots').value = '2';
+  document.getElementById('cat-miner-foto-data').value = '';
+  document.getElementById('cat-miner-foto-preview').style.display = 'none';
+  document.getElementById('cat-miner-foto-preview').src = '';
+  document.getElementById('cat-miner-pode-vendido').checked = false;
+  showToast('Minerador cadastrado no catálogo.');
+  await loadCatalogoMiners();
+  return false;
+}
+
+async function excluirCatalogoMiner(id){
+  if (!confirm('Excluir este minerador do catálogo? Quem já vinculou esse item em "Meus Miners" vai perder a referência.')) return;
+  const { error } = await supabaseClient.from('miners_catalogo').delete().eq('id', id);
+  if (error){ showToast('Erro ao remover: ' + error.message); return; }
+  showToast('Minerador removido do catálogo.');
+  await loadCatalogoMiners();
+  await loadMiners();
+}
+
+/* ---------------- Catálogo global de Racks (compartilhado) ---------------- */
+async function loadCatalogoRacks(){
+  const { data } = await supabaseClient.from('racks_catalogo').select('*').order('nome');
+  catalogoRacks = data || [];
+  renderCatalogoRacks();
+  popularSelectMeuRackCatalogo();
+}
+
+let editingCatalogoRackId = null;
+
+function popularSelectMeuRackCatalogo(){
+  const sel = document.getElementById('rack-catalogo-id');
+  if (!sel) return;
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Selecione um rack...</option>' + catalogoRacks.map(c =>
+    `<option value="${c.id}">${escapeHtml(c.nome)} — ${c.slots} slots · ${fmtNum(c.bonus)}%</option>`
+  ).join('');
+  sel.value = catalogoRacks.some(c => c.id === atual) ? atual : '';
+}
+
+function atualizarPreviewMeuRack(){
+  const id = document.getElementById('rack-catalogo-id').value;
+  const box = document.getElementById('rack-preview-catalogo');
+  const c = catalogoRacks.find(x => x.id === id);
+  if (!c){ box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const foto = document.getElementById('rack-preview-foto');
+  foto.src = c.foto || ''; foto.style.display = c.foto ? 'block' : 'none';
+  document.getElementById('rack-preview-slots').value = c.slots;
+  document.getElementById('rack-preview-bonus').value = fmtNum(c.bonus) + '%';
+  document.getElementById('rack-preview-pode-vendido').checked = c.pode_vendido === true;
+}
+
+function renderCatalogoRacks(){
+  const contador = document.getElementById('contador-catalogo-racks');
+  if (contador) contador.textContent = catalogoRacks.length;
+
+  const filtro = (document.getElementById('cat-rack-busca')?.value || '').trim().toLowerCase();
+  const lista = catalogoRacks.filter(c => c.nome.toLowerCase().includes(filtro));
+
+  const list = document.getElementById('catalogo-racks-list');
+  if (!lista.length){
+    list.innerHTML = '<div class="empty-state">Nenhum rack encontrado.</div>';
+    return;
+  }
+  list.innerHTML = lista.map(c => {
+    if (c.id === editingCatalogoRackId){
+      return `
+        <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div class="field" style="margin-bottom:0;">
+            <label>Foto</label>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <img id="edit-cat-rack-foto-preview-${c.id}" src="${c.foto || ''}" alt="" class="miner-thumb" style="display:${c.foto ? 'block' : 'none'};">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-cat-rack-foto-preview-${c.id}', 'edit-cat-rack-foto-data-${c.id}')">
+            </div>
+            <input type="hidden" id="edit-cat-rack-foto-data-${c.id}" value="${c.foto || ''}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Nome</label>
+            <input type="text" id="edit-cat-rack-nome-${c.id}" value="${escapeHtml(c.nome)}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Número de slots</label>
+            <select id="edit-cat-rack-slots-${c.id}">
+              <option value="6" ${c.slots === 6 ? 'selected' : ''}>6</option>
+              <option value="8" ${c.slots !== 6 ? 'selected' : ''}>8</option>
+            </select>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Bônus (%)</label>
+            <input type="number" step="any" min="0" id="edit-cat-rack-bonus-${c.id}" value="${c.bonus}">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label class="check-line"><input type="checkbox" id="edit-cat-rack-pode-vendido-${c.id}" ${c.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:4px;">
+            <button class="btn btn-primary btn-sm" style="flex:1;" onclick="salvarEdicaoCatalogoRack('${c.id}')">Salvar</button>
+            <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="cancelarEdicaoCatalogoRack()">Cancelar</button>
+          </div>
+        </div>
+      `;
+    }
+    return `
+    <div class="miner-row">
+      <div class="miner-info">
+        ${c.foto ? `<img src="${c.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">▤</div>`}
+        <div class="miner-info-text">
+          <div class="name">${escapeHtml(c.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${c.slots} slots</span> ${c.pode_vendido ? '<span class="tag-venda">Pode ser Vendido</span>' : ''}</div>
+          <div class="stats">${c.slots} slots · Bônus: ${fmtNum(c.bonus)}%</div>
+        </div>
+      </div>
+      <div class="miner-actions">
+        <button class="icon-btn" onclick="startEdicaoCatalogoRack('${c.id}')" title="Editar">✎</button>
+        <button class="icon-btn" onclick="excluirCatalogoRack('${c.id}')" title="Remover">✕</button>
+      </div>
+    </div>
+  `;
+  }).join('');
+}
+
+function startEdicaoCatalogoRack(id){
+  editingCatalogoRackId = id;
+  renderCatalogoRacks();
+}
+
+function cancelarEdicaoCatalogoRack(){
+  editingCatalogoRackId = null;
+  renderCatalogoRacks();
+}
+
+async function salvarEdicaoCatalogoRack(id){
+  const nome = document.getElementById(`edit-cat-rack-nome-${id}`).value.trim();
+  const foto = document.getElementById(`edit-cat-rack-foto-data-${id}`).value || null;
+  const slots = parseInt(document.getElementById(`edit-cat-rack-slots-${id}`).value, 10);
+  const bonus = parseFloat(document.getElementById(`edit-cat-rack-bonus-${id}`).value);
+  const pode_vendido = document.getElementById(`edit-cat-rack-pode-vendido-${id}`).checked;
+
+  if (!nome || isNaN(bonus) || (slots !== 6 && slots !== 8)){
+    showToast('Preencha todos os campos corretamente.');
+    return;
+  }
+  if (catalogoRacks.some(c => c.id !== id && chaveNome(c.nome) === chaveNome(nome))){
+    showToast('Já existe outro rack cadastrado com esse nome.');
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from('racks_catalogo').update({ nome, foto, slots, bonus, pode_vendido }).eq('id', id);
+
+  if (error){ showToast('Erro ao salvar alterações.'); return; }
+  editingCatalogoRackId = null;
+  showToast('Rack do catálogo atualizado.');
+  await loadCatalogoRacks();
+  await loadRacks();
+}
+
+async function handleAddCatalogoRack(e){
+  e.preventDefault();
+  const errEl = document.getElementById('cat-rack-error');
+  errEl.style.display = 'none';
+
+  const nome = document.getElementById('cat-rack-nome').value.trim();
+  const foto = document.getElementById('cat-rack-foto-data').value || null;
+  const slots = parseInt(document.getElementById('cat-rack-slots').value, 10);
+  const bonus = parseFloat(document.getElementById('cat-rack-bonus').value);
+  const pode_vendido = document.getElementById('cat-rack-pode-vendido').checked;
+
+  if (catalogoRacks.some(c => chaveNome(c.nome) === chaveNome(nome))){
+    errEl.textContent = 'Já existe um rack cadastrado com esse nome.';
+    errEl.style.display = 'block';
+    return false;
+  }
+
+  const { error } = await supabaseClient
+    .from('racks_catalogo').insert({ nome, foto, slots, bonus, pode_vendido, criado_por: currentUser.id });
+
+  if (error){
+    errEl.textContent = 'Erro ao cadastrar: ' + error.message;
+    errEl.style.display = 'block';
+    return false;
+  }
+  document.getElementById('cat-rack-nome').value = '';
+  document.getElementById('cat-rack-bonus').value = '';
+  document.getElementById('cat-rack-slots').value = '8';
+  document.getElementById('cat-rack-foto-data').value = '';
+  document.getElementById('cat-rack-foto-preview').style.display = 'none';
+  document.getElementById('cat-rack-foto-preview').src = '';
+  document.getElementById('cat-rack-pode-vendido').checked = false;
+  showToast('Rack cadastrado no catálogo.');
+  await loadCatalogoRacks();
+  return false;
+}
+
+async function excluirCatalogoRack(id){
+  if (!confirm('Excluir este rack do catálogo? Quem já vinculou esse item em "Meus Racks" vai perder a referência.')) return;
+  const { error } = await supabaseClient.from('racks_catalogo').delete().eq('id', id);
+  if (error){ showToast('Erro ao remover: ' + error.message); return; }
+  showToast('Rack removido do catálogo.');
+  await loadCatalogoRacks();
+  await loadRacks();
+}
+
+/* ---------------- Miners CRUD (vínculo do usuário com o catálogo global) ---------------- */
+
+// Resolve nome/foto/poder/bônus/slots/pode_vendido a partir do catálogo global — assim, se o
+// catálogo for editado ("Cadastro Miners"), os valores mostrados aqui mudam junto, sem precisar
+// duplicar/copiar esses dados pra cada usuário
+function resolverMeuMiner(m){
+  const cat = catalogoMiners.find(c => c.id === m.catalogo_id) || {};
+  return {
+    ...m,
+    nome: cat.nome || '(item removido do catálogo)',
+    foto: cat.foto || null,
+    poder: cat.poder ?? 0,
+    unidade: cat.unidade || 'H/s',
+    poder_hs: cat.poder_hs ?? 0,
+    bonus: cat.bonus ?? 0,
+    slots_ocupados: cat.slots_ocupados ?? 1,
+    pode_vendido: cat.pode_vendido === true,
+  };
+}
+
 async function loadMiners(){
   const { data, error } = await supabaseClient
     .from('miners').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true });
-  myMiners = data || [];
+  myMiners = (data || []).map(resolverMeuMiner);
   renderMiners();
 }
 
@@ -1886,7 +2443,7 @@ function renderMiners(){
 
   const list = document.getElementById('miners-list');
   if (!myMiners.length){
-    list.innerHTML = '<div class="empty-state">Nenhum minerador cadastrado ainda.</div>';
+    list.innerHTML = '<div class="empty-state">Nenhum minerador vinculado ainda.</div>';
     return;
   }
   const minersOrdenados = [...myMiners].sort((a, b) => {
@@ -1902,38 +2459,15 @@ function renderMiners(){
   });
   list.innerHTML = minersOrdenados.map(m => {
     if (m.id === editingMinerId){
-      const opcoesUnidade = Object.keys(UNIDADES_FATOR).map(u =>
-        `<option value="${u}" ${u === (m.unidade || 'H/s') ? 'selected' : ''}>${u}</option>`
-      ).join('');
       const opcoesMoedaEdit = opcoesMoeda(m.moeda || 'RST');
       return `
         <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
           <div class="field" style="margin-bottom:0;">
-            <label>Foto do minerador</label>
+            <label>Minerador (do catálogo)</label>
             <div style="display:flex; align-items:center; gap:10px;">
-              <img id="edit-foto-preview-${m.id}" src="${m.foto || ''}" alt="" class="miner-thumb" style="display:${m.foto ? 'block' : 'none'};">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-foto-preview-${m.id}', 'edit-foto-data-${m.id}')">
+              ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">⛏</div>`}
+              <div class="hint" style="margin:0; text-align:left;">${escapeHtml(m.nome)} · ${fmtNum(m.poder)} ${m.unidade} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados} slot(s)</div>
             </div>
-            <input type="hidden" id="edit-foto-data-${m.id}" value="${m.foto || ''}">
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Nome do miner</label>
-            <input type="text" id="edit-nome-${m.id}" value="${escapeHtml(m.nome)}">
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Poder</label>
-            <div style="display:flex; gap:8px;">
-              <input type="number" step="any" min="0" id="edit-poder-${m.id}" value="${m.poder}" style="flex:2;">
-              <select id="edit-unidade-${m.id}" style="flex:1;">${opcoesUnidade}</select>
-            </div>
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Bônus (%)</label>
-            <input type="number" step="any" min="0" id="edit-bonus-${m.id}" value="${m.bonus}">
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Slots ocupados no rack</label>
-            <input type="number" step="1" min="1" id="edit-slots-ocupados-${m.id}" value="${m.slots_ocupados ?? 1}">
           </div>
           <div class="field" style="margin-bottom:0;">
             <label>Valor pago</label>
@@ -1954,7 +2488,6 @@ function renderMiners(){
             <label class="check-line"><input type="checkbox" id="edit-ativo-${m.id}" ${m.ativo !== false ? 'checked' : ''}> Miner ativo</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-rack-${m.id}" ${m.usar_rack !== false ? 'checked' : ''}> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-cb-${m.id}" ${m.usar_cb !== false ? 'checked' : ''}> Considerar no cálculo de custo-benefício</label>
-            <label class="check-line"><input type="checkbox" id="edit-pode-vendido-${m.id}" ${m.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
           </div>
           <div style="display:flex; gap:8px; margin-top:4px;">
             <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveMinerEdit('${m.id}')">Salvar</button>
@@ -2005,75 +2538,62 @@ function cancelMinerEdit(){
 }
 
 async function saveMinerEdit(id){
-  const nome = document.getElementById(`edit-nome-${id}`).value.trim();
-  const foto = document.getElementById(`edit-foto-data-${id}`).value || null;
-  const poder = parseFloat(document.getElementById(`edit-poder-${id}`).value);
-  const unidade = document.getElementById(`edit-unidade-${id}`).value;
-  const bonus = parseFloat(document.getElementById(`edit-bonus-${id}`).value);
-  const slots_ocupados = parseInt(document.getElementById(`edit-slots-ocupados-${id}`).value, 10);
   const valor = parseFloat(document.getElementById(`edit-valor-${id}`).value);
   const valor_mercado = parseFloat(document.getElementById(`edit-valor-mercado-${id}`).value);
   const moeda = document.getElementById(`edit-moeda-${id}`).value;
   const ativo = document.getElementById(`edit-ativo-${id}`).checked;
   const usar_rack = document.getElementById(`edit-usar-rack-${id}`).checked;
   const usar_cb = document.getElementById(`edit-usar-cb-${id}`).checked;
-  const pode_vendido = document.getElementById(`edit-pode-vendido-${id}`).checked;
 
-  if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(slots_ocupados) || slots_ocupados < 1 || isNaN(valor) || isNaN(valor_mercado)){
-    showToast('Preencha todos os campos corretamente.');
+  if (isNaN(valor) || isNaN(valor_mercado)){
+    showToast('Preencha os valores corretamente.');
     return;
   }
-  const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').update({ nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb, pode_vendido }).eq('id', id);
+    .from('miners').update({ valor, valor_mercado, moeda, ativo, usar_rack, usar_cb }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
     return;
   }
   editingMinerId = null;
-  await salvarNaBibliotecaSeNovo('miner', nome, `edit-foto-data-${id}`);
   showToast('Miner atualizado.');
   await loadMiners();
 }
 
 async function handleAddMiner(e){
   e.preventDefault();
-  const nome = document.getElementById('miner-nome').value.trim();
-  const foto = document.getElementById('miner-foto-data').value || null;
-  const poder = parseFloat(document.getElementById('miner-poder').value);
-  const unidade = document.getElementById('miner-unidade').value;
-  const bonus = parseFloat(document.getElementById('miner-bonus').value);
-  const slots_ocupados = parseInt(document.getElementById('miner-slots-ocupados').value, 10);
+  const errEl = document.getElementById('miner-error');
+  errEl.style.display = 'none';
+
+  const catalogo_id = document.getElementById('miner-catalogo-id').value;
   const valor = parseFloat(document.getElementById('miner-valor').value);
   const valor_mercado = parseFloat(document.getElementById('miner-valor-mercado').value);
   const moeda = document.getElementById('miner-moeda').value;
   const ativo = document.getElementById('miner-ativo').checked;
   const usar_rack = document.getElementById('miner-usar-rack').checked;
   const usar_cb = document.getElementById('miner-usar-cb').checked;
-  const pode_vendido = document.getElementById('miner-pode-vendido').checked;
-  const poder_hs = paraHs(poder, unidade);
 
-  const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb, pode_vendido });
-
-  if (error){
-    showToast('Erro ao adicionar minerador.');
+  if (!catalogo_id){
+    errEl.textContent = 'Escolha um minerador do catálogo.';
+    errEl.style.display = 'block';
     return false;
   }
-  await salvarNaBibliotecaSeNovo('miner', nome, 'miner-foto-data');
-  document.getElementById('miner-nome').value = '';
-  document.getElementById('miner-poder').value = '';
-  document.getElementById('miner-bonus').value = '';
-  document.getElementById('miner-slots-ocupados').value = '2';
+
+  const { error } = await supabaseClient
+    .from('miners').insert({ user_id: currentUser.id, catalogo_id, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb });
+
+  if (error){
+    errEl.textContent = 'Erro ao vincular minerador: ' + error.message;
+    errEl.style.display = 'block';
+    return false;
+  }
+  document.getElementById('miner-catalogo-id').value = '';
   document.getElementById('miner-valor').value = '0';
   document.getElementById('miner-valor-mercado').value = '0';
-  document.getElementById('miner-foto-data').value = '';
-  document.getElementById('miner-foto-preview').style.display = 'none';
-  document.getElementById('miner-foto-preview').src = '';
-  document.getElementById('miner-pode-vendido').checked = false;
-  showToast('Miner adicionado.');
+  document.getElementById('miner-preview-catalogo').style.display = 'none';
+  showToast('Minerador adicionado aos seus miners.');
   await loadMiners();
   return false;
 }
@@ -2101,20 +2621,13 @@ async function duplicarMiner(id){
 
   const { error } = await supabaseClient.from('miners').insert({
     user_id: currentUser.id,
-    nome: original.nome,
-    foto: original.foto || null,
-    poder: original.poder,
-    unidade: original.unidade || 'H/s',
-    poder_hs: original.poder_hs,
-    bonus: original.bonus,
-    slots_ocupados: original.slots_ocupados ?? 1,
+    catalogo_id: original.catalogo_id,
     valor: 0,
     valor_mercado: 0,
     moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
     usar_rack: original.usar_rack !== false,
     usar_cb: original.usar_cb !== false,
-    pode_vendido: original.pode_vendido === true,
   });
 
   if (error){ showToast('Erro ao duplicar minerador.'); return; }
@@ -2122,13 +2635,27 @@ async function duplicarMiner(id){
   await loadMiners();
 }
 
-/* ---------------- Racks CRUD ---------------- */
+/* ---------------- Racks CRUD (vínculo do usuário com o catálogo global) ---------------- */
 let editingRackId = null;
+
+// Resolve nome/foto/slots/bônus/pode_vendido a partir do catálogo global — assim, se o catálogo
+// for editado ("Cadastro Racks"), os valores mostrados aqui mudam junto
+function resolverMeuRack(r){
+  const cat = catalogoRacks.find(c => c.id === r.catalogo_id) || {};
+  return {
+    ...r,
+    nome: cat.nome || '(item removido do catálogo)',
+    foto: cat.foto || null,
+    slots: cat.slots ?? 4,
+    bonus: cat.bonus ?? 0,
+    pode_vendido: cat.pode_vendido === true,
+  };
+}
 
 async function loadRacks(){
   const { data, error } = await supabaseClient
     .from('racks').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: true });
-  myRacks = data || [];
+  myRacks = (data || []).map(resolverMeuRack);
   renderRacks();
 }
 
@@ -2138,7 +2665,7 @@ function renderRacks(){
 
   const list = document.getElementById('racks-list');
   if (!myRacks.length){
-    list.innerHTML = '<div class="empty-state">Nenhum rack cadastrado ainda.</div>';
+    list.innerHTML = '<div class="empty-state">Nenhum rack vinculado ainda.</div>';
     return;
   }
   const racksOrdenados = [...myRacks].sort((a, b) => {
@@ -2154,24 +2681,11 @@ function renderRacks(){
       return `
         <div class="miner-row" style="flex-direction:column; align-items:stretch; gap:8px;">
           <div class="field" style="margin-bottom:0;">
-            <label>Foto do rack</label>
+            <label>Rack (do catálogo)</label>
             <div style="display:flex; align-items:center; gap:10px;">
-              <img id="edit-rack-foto-preview-${r.id}" src="${r.foto || ''}" alt="" class="miner-thumb" style="display:${r.foto ? 'block' : 'none'};">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-rack-foto-preview-${r.id}', 'edit-rack-foto-data-${r.id}')">
+              ${r.foto ? `<img src="${r.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">▤</div>`}
+              <div class="hint" style="margin:0; text-align:left;">${escapeHtml(r.nome)} · ${r.slots} slots · Bônus ${fmtNum(r.bonus)}%</div>
             </div>
-            <input type="hidden" id="edit-rack-foto-data-${r.id}" value="${r.foto || ''}">
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Nome do rack</label>
-            <input type="text" id="edit-rack-nome-${r.id}" value="${escapeHtml(r.nome)}">
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Bônus (%)</label>
-            <input type="number" step="any" min="0" id="edit-rack-bonus-${r.id}" value="${r.bonus}">
-          </div>
-          <div class="field" style="margin-bottom:0;">
-            <label>Número de slots</label>
-            <input type="number" step="1" min="1" id="edit-rack-slots-${r.id}" value="${r.slots ?? 4}">
           </div>
           <div class="field" style="margin-bottom:0;">
             <label>Valor pago</label>
@@ -2190,7 +2704,6 @@ function renderRacks(){
           </div>
           <div class="field" style="margin-bottom:0;">
             <label class="check-line"><input type="checkbox" id="edit-rack-ativo-${r.id}" ${r.ativo !== false ? 'checked' : ''}> Rack ativo</label>
-            <label class="check-line"><input type="checkbox" id="edit-rack-pode-vendido-${r.id}" ${r.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
           </div>
           <div style="display:flex; gap:8px; margin-top:4px;">
             <button class="btn btn-primary btn-sm" style="flex:1;" onclick="saveRackEdit('${r.id}')">Salvar</button>
@@ -2235,64 +2748,58 @@ function cancelRackEdit(){
 }
 
 async function saveRackEdit(id){
-  const nome = document.getElementById(`edit-rack-nome-${id}`).value.trim();
-  const foto = document.getElementById(`edit-rack-foto-data-${id}`).value || null;
-  const bonus = parseFloat(document.getElementById(`edit-rack-bonus-${id}`).value);
-  const slots = parseInt(document.getElementById(`edit-rack-slots-${id}`).value, 10);
   const valor = parseFloat(document.getElementById(`edit-rack-valor-${id}`).value);
   const valor_mercado = parseFloat(document.getElementById(`edit-rack-valor-mercado-${id}`).value);
   const moeda = document.getElementById(`edit-rack-moeda-${id}`).value;
   const ativo = document.getElementById(`edit-rack-ativo-${id}`).checked;
-  const pode_vendido = document.getElementById(`edit-rack-pode-vendido-${id}`).checked;
 
-  if (!nome || isNaN(bonus) || isNaN(slots) || slots < 1 || isNaN(valor) || isNaN(valor_mercado)){
-    showToast('Preencha todos os campos corretamente.');
+  if (isNaN(valor) || isNaN(valor_mercado)){
+    showToast('Preencha os valores corretamente.');
     return;
   }
 
   const { error } = await supabaseClient
-    .from('racks').update({ nome, foto, bonus, slots, valor, valor_mercado, moeda, ativo, pode_vendido }).eq('id', id);
+    .from('racks').update({ valor, valor_mercado, moeda, ativo }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
     return;
   }
   editingRackId = null;
-  await salvarNaBibliotecaSeNovo('rack', nome, `edit-rack-foto-data-${id}`);
   showToast('Rack atualizado.');
   await loadRacks();
 }
 
 async function handleAddRack(e){
   e.preventDefault();
-  const nome = document.getElementById('rack-nome').value.trim();
-  const foto = document.getElementById('rack-foto-data').value || null;
-  const bonus = parseFloat(document.getElementById('rack-bonus').value);
-  const slots = parseInt(document.getElementById('rack-slots').value, 10);
+  const errEl = document.getElementById('rack-error');
+  errEl.style.display = 'none';
+
+  const catalogo_id = document.getElementById('rack-catalogo-id').value;
   const valor = parseFloat(document.getElementById('rack-valor').value);
   const valor_mercado = parseFloat(document.getElementById('rack-valor-mercado').value);
   const moeda = document.getElementById('rack-moeda').value;
   const ativo = document.getElementById('rack-ativo').checked;
-  const pode_vendido = document.getElementById('rack-pode-vendido').checked;
 
-  const { error } = await supabaseClient
-    .from('racks').insert({ user_id: currentUser.id, nome, foto, bonus, slots, valor, valor_mercado, moeda, ativo, pode_vendido });
-
-  if (error){
-    showToast('Erro ao adicionar rack.');
+  if (!catalogo_id){
+    errEl.textContent = 'Escolha um rack do catálogo.';
+    errEl.style.display = 'block';
     return false;
   }
-  await salvarNaBibliotecaSeNovo('rack', nome, 'rack-foto-data');
-  document.getElementById('rack-nome').value = '';
-  document.getElementById('rack-bonus').value = '';
-  document.getElementById('rack-slots').value = '4';
+
+  const { error } = await supabaseClient
+    .from('racks').insert({ user_id: currentUser.id, catalogo_id, valor, valor_mercado, moeda, ativo });
+
+  if (error){
+    errEl.textContent = 'Erro ao vincular rack: ' + error.message;
+    errEl.style.display = 'block';
+    return false;
+  }
+  document.getElementById('rack-catalogo-id').value = '';
   document.getElementById('rack-valor').value = '0';
   document.getElementById('rack-valor-mercado').value = '0';
-  document.getElementById('rack-foto-data').value = '';
-  document.getElementById('rack-foto-preview').style.display = 'none';
-  document.getElementById('rack-foto-preview').src = '';
-  document.getElementById('rack-pode-vendido').checked = false;
-  showToast('Rack adicionado.');
+  document.getElementById('rack-preview-catalogo').style.display = 'none';
+  showToast('Rack adicionado aos seus racks.');
   await loadRacks();
   return false;
 }
@@ -2320,15 +2827,11 @@ async function duplicarRack(id){
 
   const { error } = await supabaseClient.from('racks').insert({
     user_id: currentUser.id,
-    nome: original.nome,
-    foto: original.foto || null,
-    bonus: original.bonus,
-    slots: original.slots ?? 4,
+    catalogo_id: original.catalogo_id,
     valor: 0,
     valor_mercado: 0,
     moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
-    pode_vendido: original.pode_vendido === true,
   });
 
   if (error){ showToast('Erro ao duplicar rack.'); return; }
