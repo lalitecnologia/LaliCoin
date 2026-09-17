@@ -311,6 +311,35 @@
   }
   .status-pill.pendente{color:var(--danger); border:1px solid var(--danger); background:rgba(225,85,74,0.1);}
   .status-pill.liberado{color:var(--success); border:1px solid var(--success); background:rgba(76,175,109,0.1);}
+
+  /* ---------- Biblioteca pública de imagens ---------- */
+  .img-hint{
+    font-size:11px; color:var(--muted); line-height:1.5; background:var(--surface-2);
+    border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin:6px 0 10px;
+    text-align:left;
+  }
+  .img-hint b{color:var(--gold);}
+  .img-modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:100;
+    display:none; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;
+  }
+  .img-modal-overlay.active{display:flex;}
+  .img-modal{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:20px; max-width:480px; width:100%;
+  }
+  .img-modal-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+  .img-modal-grid{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-top:12px;
+    max-height:360px; overflow-y:auto;
+  }
+  .img-modal-item{
+    cursor:pointer; border:1px solid var(--border); border-radius:10px; padding:6px;
+    text-align:center; background:var(--surface-2);
+  }
+  .img-modal-item:hover{border-color:var(--gold);}
+  .img-modal-item img{width:100%; height:56px; object-fit:contain; border-radius:6px; margin-bottom:4px; background:#fff;}
+  .img-modal-item .nome{font-size:9px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .counter-badge{
     display:inline-flex; align-items:center; justify-content:center;
     min-width:20px; height:20px; padding:0 6px; margin-left:6px;
@@ -413,6 +442,18 @@
   </div>
 </div>
 
+<!-- ================= BUSCA DE IMAGEM PÚBLICA ================= -->
+<div class="img-modal-overlay" id="img-modal-overlay">
+  <div class="img-modal">
+    <div class="img-modal-header">
+      <div class="section-title" style="margin:0;">Buscar imagem cadastrada</div>
+      <button type="button" class="icon-btn" onclick="fecharBuscaImagem()">✕</button>
+    </div>
+    <input type="text" id="img-modal-busca" placeholder="Buscar pelo nome..." oninput="filtrarImagensPublicas()">
+    <div class="img-modal-grid" id="img-modal-grid"></div>
+  </div>
+</div>
+
 <!-- ================= PENDENTE DE LIBERAÇÃO ================= -->
 <div id="pending-screen" style="display:none; min-height:100vh; flex-direction:column; align-items:center; padding:28px;">
   <div class="auth-box" style="max-width:420px; padding-top:12px;">
@@ -486,16 +527,25 @@
         <div class="section-title">Cadastrar minerador</div>
         <form onsubmit="return handleAddMiner(event)">
           <div class="field">
-            <label>Foto do minerador</label>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <img id="miner-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'miner-foto-preview', 'miner-foto-data')">
-            </div>
-            <input type="hidden" id="miner-foto-data">
+            <label>Nome do minerador</label>
+            <input type="text" id="miner-nome" required placeholder="Ex: ShaleRig III" onblur="verificarImagemExistente('miner', 'miner-nome', 'miner-foto-preview', 'miner-foto-data')">
           </div>
           <div class="field">
-            <label>Nome do minerador</label>
-            <input type="text" id="miner-nome" required placeholder="Ex: Quantum X7">
+            <label>Foto do minerador</label>
+            <div class="img-hint">
+              As imagens são compartilhadas entre todos os usuários e <b>únicas por nome</b> — não
+              é possível ter duas imagens diferentes pro mesmo nome. Cadastre o nome exatamente
+              como aparece no RollerCoin (respeitando maiúsculas/minúsculas), incluindo o nível
+              quando houver. <b>Exemplo Miner: ShaleRig III</b>. Se já existir uma imagem pra esse
+              nome, ela é carregada automaticamente ao sair do campo Nome — só envie uma nova se
+              ainda não existir.
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <img id="miner-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'miner-foto-preview', 'miner-foto-data')">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="abrirBuscaImagem('miner', {tipo:'miner', previewId:'miner-foto-preview', dataId:'miner-foto-data'})">Buscar imagem cadastrada</button>
+            </div>
+            <input type="hidden" id="miner-foto-data">
           </div>
           <div class="field">
             <label>Poder</label>
@@ -526,7 +576,15 @@
             <div class="moeda-field">
               <input type="number" id="miner-valor" required step="any" min="0" value="0" placeholder="Ex: 250" style="flex:1;">
               <span class="coin-badge" id="miner-moeda-badge"></span>
-              <select id="miner-moeda" onchange="atualizarBadge('miner-moeda-badge', this.value)" style="flex:1.4;"></select>
+              <select id="miner-moeda" onchange="atualizarBadge('miner-moeda-badge', this.value); atualizarBadge('miner-moeda-badge-vm', this.value);" style="flex:1.4;"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Valor de mercado</label>
+            <div class="moeda-field">
+              <input type="number" id="miner-valor-mercado" required step="any" min="0" value="0" placeholder="Ex: 300" style="flex:1;">
+              <span class="coin-badge" id="miner-moeda-badge-vm"></span>
+              <span class="hint" style="flex:1.4; margin:0; text-align:left;">mesma moeda do valor pago</span>
             </div>
           </div>
           <div class="field">
@@ -552,16 +610,25 @@
 
         <form onsubmit="return handleAddRack(event)">
           <div class="field">
-            <label>Foto do rack</label>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <img id="rack-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'rack-foto-preview', 'rack-foto-data')">
-            </div>
-            <input type="hidden" id="rack-foto-data">
+            <label>Nome do rack</label>
+            <input type="text" id="rack-nome" required placeholder="Ex: Regular Rack 8" onblur="verificarImagemExistente('rack', 'rack-nome', 'rack-foto-preview', 'rack-foto-data')">
           </div>
           <div class="field">
-            <label>Nome do rack</label>
-            <input type="text" id="rack-nome" required placeholder="Ex: Rack Season 24">
+            <label>Foto do rack</label>
+            <div class="img-hint">
+              As imagens são compartilhadas entre todos os usuários e <b>únicas por nome</b> — não
+              é possível ter duas imagens diferentes pro mesmo nome. Cadastre o nome exatamente
+              como aparece no RollerCoin (respeitando maiúsculas/minúsculas), incluindo a
+              quantidade de slots no nome. <b>Exemplo Rack: Regular Rack 8</b>. Se já existir uma
+              imagem pra esse nome, ela é carregada automaticamente ao sair do campo Nome — só
+              envie uma nova se ainda não existir.
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <img id="rack-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'rack-foto-preview', 'rack-foto-data')">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="abrirBuscaImagem('rack', {tipo:'rack', previewId:'rack-foto-preview', dataId:'rack-foto-data'})">Buscar imagem cadastrada</button>
+            </div>
+            <input type="hidden" id="rack-foto-data">
           </div>
           <div class="field">
             <label>Bônus (%)</label>
@@ -576,7 +643,15 @@
             <div class="moeda-field">
               <input type="number" id="rack-valor" required step="any" min="0" value="0" placeholder="Ex: 5000" style="flex:1;">
               <span class="coin-badge" id="rack-moeda-badge"></span>
-              <select id="rack-moeda" onchange="atualizarBadge('rack-moeda-badge', this.value)" style="flex:1.4;"></select>
+              <select id="rack-moeda" onchange="atualizarBadge('rack-moeda-badge', this.value); atualizarBadge('rack-moeda-badge-vm', this.value);" style="flex:1.4;"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Valor de mercado</label>
+            <div class="moeda-field">
+              <input type="number" id="rack-valor-mercado" required step="any" min="0" value="0" placeholder="Ex: 6000" style="flex:1;">
+              <span class="coin-badge" id="rack-moeda-badge-vm"></span>
+              <span class="hint" style="flex:1.4; margin:0; text-align:left;">mesma moeda do valor pago</span>
             </div>
           </div>
           <div class="field">
@@ -801,7 +876,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v52';
+const APP_VERSION = 'v53';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -866,12 +941,120 @@ async function handleFotoMiner(event, idPreview, idCampoOculto){
   if (!file) return;
   try {
     const dataUrl = await redimensionarImagem(file);
-    document.getElementById(idCampoOculto).value = dataUrl;
+    const campo = document.getElementById(idCampoOculto);
+    campo.value = dataUrl;
+    campo.dataset.imagemPublicaNome = ''; // upload novo/manual: ainda não está vinculado à biblioteca
     const preview = document.getElementById(idPreview);
     preview.src = dataUrl;
     preview.style.display = 'block';
   } catch (err){
     showToast('Não foi possível processar essa imagem.');
+  }
+}
+
+/* ---------------- Biblioteca pública de imagens (compartilhada, única por nome) ---------------- */
+let imagensPublicasCache = { miner: null, rack: null };
+let imgModalContexto = null;
+
+async function carregarImagensPublicas(tipo){
+  if (imagensPublicasCache[tipo]) return imagensPublicasCache[tipo];
+  const { data } = await supabaseClient.from('imagens_publicas').select('nome, imagem').eq('tipo', tipo).order('nome');
+  imagensPublicasCache[tipo] = data || [];
+  return imagensPublicasCache[tipo];
+}
+
+// Ao sair do campo Nome, procura na biblioteca pública uma imagem já cadastrada com esse nome
+// exato e carrega automaticamente — só se o campo de imagem ainda estiver vazio, pra não
+// sobrescrever algo que o usuário já escolheu ou enviou manualmente
+async function verificarImagemExistente(tipo, nomeCampoId, previewId, dataId){
+  const nome = document.getElementById(nomeCampoId).value.trim();
+  if (!nome) return;
+  const dataInput = document.getElementById(dataId);
+  if (dataInput.value) return;
+
+  const lista = await carregarImagensPublicas(tipo);
+  const encontrada = lista.find(i => i.nome === nome);
+  if (encontrada){
+    aplicarImagemNoFormulario({ previewId, dataId }, encontrada.imagem, encontrada.nome);
+    showToast('Imagem já cadastrada encontrada para "' + nome + '" e carregada automaticamente.');
+  }
+}
+
+function aplicarImagemNoFormulario(ctx, dataUrl, nomeImagem){
+  const preview = document.getElementById(ctx.previewId);
+  const dataInput = document.getElementById(ctx.dataId);
+  preview.src = dataUrl;
+  preview.style.display = 'block';
+  dataInput.value = dataUrl;
+  // marca que essa imagem já existe na biblioteca com esse nome exato — evita tentar
+  // reenviar/duplicar ela na hora de salvar o cadastro
+  dataInput.dataset.imagemPublicaNome = nomeImagem;
+}
+
+async function abrirBuscaImagem(tipo, contexto){
+  imgModalContexto = { tipo, ...contexto };
+  document.getElementById('img-modal-busca').value = '';
+  await carregarImagensPublicas(tipo);
+  renderImgModalGrid(tipo, '');
+  document.getElementById('img-modal-overlay').classList.add('active');
+}
+
+function fecharBuscaImagem(){
+  document.getElementById('img-modal-overlay').classList.remove('active');
+  imgModalContexto = null;
+}
+
+function renderImgModalGrid(tipo, filtro){
+  const grid = document.getElementById('img-modal-grid');
+  const lista = (imagensPublicasCache[tipo] || []).filter(img => img.nome.toLowerCase().includes(filtro.trim().toLowerCase()));
+  if (!lista.length){
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">Nenhuma imagem encontrada ainda. Envie uma nova pelo formulário, com o nome certo.</div>`;
+    return;
+  }
+  grid.innerHTML = lista.map(img => `
+    <div class="img-modal-item" data-nome="${escapeHtml(img.nome)}">
+      <img src="${img.imagem}" alt="">
+      <div class="nome">${escapeHtml(img.nome)}</div>
+    </div>
+  `).join('');
+}
+
+// listener único e delegado (evita ter que escapar nomes dentro de atributos onclick)
+document.getElementById('img-modal-grid').addEventListener('click', (e) => {
+  const item = e.target.closest('.img-modal-item');
+  if (item) escolherImagemPublica(item.dataset.nome);
+});
+
+function filtrarImagensPublicas(){
+  if (!imgModalContexto) return;
+  renderImgModalGrid(imgModalContexto.tipo, document.getElementById('img-modal-busca').value);
+}
+
+function escolherImagemPublica(nome){
+  if (!imgModalContexto) return;
+  const lista = imagensPublicasCache[imgModalContexto.tipo] || [];
+  const img = lista.find(i => i.nome === nome);
+  if (!img) return;
+  aplicarImagemNoFormulario(imgModalContexto, img.imagem, img.nome);
+  fecharBuscaImagem();
+}
+
+// Depois de salvar um cadastro com uma imagem enviada manualmente (não vinda da biblioteca),
+// tenta guardar essa imagem na biblioteca pública pra ficar disponível pros outros usuários.
+// Se já existir uma imagem com esse nome (corrida entre dois usuários, por exemplo), o banco
+// rejeita por causa da restrição de nome único e a gente simplesmente ignora — o cadastro do
+// usuário já foi salvo normalmente com a imagem que ele enviou.
+async function salvarNaBibliotecaSeNovo(tipo, nome, dataInputId){
+  const dataInput = document.getElementById(dataInputId);
+  if (!dataInput || !dataInput.value) return;
+  if (dataInput.dataset.imagemPublicaNome === nome) return; // já veio da biblioteca com esse nome
+
+  const { error } = await supabaseClient.from('imagens_publicas')
+    .insert({ tipo, nome, imagem: dataInput.value, criado_por: currentUser.id });
+
+  if (!error){
+    if (imagensPublicasCache[tipo]) imagensPublicasCache[tipo].push({ nome, imagem: dataInput.value });
+    dataInput.dataset.imagemPublicaNome = nome;
   }
 }
 
@@ -978,12 +1161,14 @@ function popularSelectsMoeda(){
     selCadastro.innerHTML = opcoesMoeda('RLT');
     selCadastro.dataset.filled = '1';
     atualizarBadge('miner-moeda-badge', 'RLT');
+    atualizarBadge('miner-moeda-badge-vm', 'RLT');
   }
   const selRack = document.getElementById('rack-moeda');
   if (selRack && !selRack.dataset.filled){
     selRack.innerHTML = opcoesMoeda('RLT');
     selRack.dataset.filled = '1';
     atualizarBadge('rack-moeda-badge', 'RLT');
+    atualizarBadge('rack-moeda-badge-vm', 'RLT');
   }
 }
 
@@ -1644,6 +1829,13 @@ function renderMiners(){
             </div>
           </div>
           <div class="field" style="margin-bottom:0;">
+            <label>Valor de mercado</label>
+            <div class="moeda-field">
+              <input type="number" step="any" min="0" id="edit-valor-mercado-${m.id}" value="${m.valor_mercado ?? ''}" style="flex:1;">
+              <span class="hint" style="margin:0; text-align:left;">mesma moeda do valor pago</span>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
             <label class="check-line"><input type="checkbox" id="edit-ativo-${m.id}" ${m.ativo !== false ? 'checked' : ''}> Miner ativo</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-rack-${m.id}" ${m.usar_rack !== false ? 'checked' : ''}> Considerar no cálculo do rack</label>
             <label class="check-line"><input type="checkbox" id="edit-usar-cb-${m.id}" ${m.usar_cb !== false ? 'checked' : ''}> Considerar no cálculo de custo-benefício</label>
@@ -1668,7 +1860,7 @@ function renderMiners(){
         ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">⛏</div>`}
         <div class="miner-info-text">
           <div class="name">${escapeHtml(m.nome)} ${tagsOff}</div>
-          <div class="stats">${m.pode_vendido ? 'PV' : 'NPV'} · Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)${m.valor !== null && m.valor !== undefined ? ' · ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
+          <div class="stats">${m.pode_vendido ? 'PV' : 'NPV'} · Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)${m.valor !== null && m.valor !== undefined ? ' · VP ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}${m.valor_mercado !== null && m.valor_mercado !== undefined ? ' · VM ' + fmtValorCompleto(m.valor_mercado) + ' ' + (m.moeda || 'RST') : ''}</div>
         </div>
       </div>
       <div class="miner-actions">
@@ -1705,26 +1897,28 @@ async function saveMinerEdit(id){
   const bonus = parseFloat(document.getElementById(`edit-bonus-${id}`).value);
   const slots_ocupados = parseInt(document.getElementById(`edit-slots-ocupados-${id}`).value, 10);
   const valor = parseFloat(document.getElementById(`edit-valor-${id}`).value);
+  const valor_mercado = parseFloat(document.getElementById(`edit-valor-mercado-${id}`).value);
   const moeda = document.getElementById(`edit-moeda-${id}`).value;
   const ativo = document.getElementById(`edit-ativo-${id}`).checked;
   const usar_rack = document.getElementById(`edit-usar-rack-${id}`).checked;
   const usar_cb = document.getElementById(`edit-usar-cb-${id}`).checked;
   const pode_vendido = document.getElementById(`edit-pode-vendido-${id}`).checked;
 
-  if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(slots_ocupados) || slots_ocupados < 1 || isNaN(valor)){
+  if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(slots_ocupados) || slots_ocupados < 1 || isNaN(valor) || isNaN(valor_mercado)){
     showToast('Preencha todos os campos corretamente.');
     return;
   }
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').update({ nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, moeda, ativo, usar_rack, usar_cb, pode_vendido }).eq('id', id);
+    .from('miners').update({ nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb, pode_vendido }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
     return;
   }
   editingMinerId = null;
+  await salvarNaBibliotecaSeNovo('miner', nome, `edit-foto-data-${id}`);
   showToast('Miner atualizado.');
   await loadMiners();
 }
@@ -1738,6 +1932,7 @@ async function handleAddMiner(e){
   const bonus = parseFloat(document.getElementById('miner-bonus').value);
   const slots_ocupados = parseInt(document.getElementById('miner-slots-ocupados').value, 10);
   const valor = parseFloat(document.getElementById('miner-valor').value);
+  const valor_mercado = parseFloat(document.getElementById('miner-valor-mercado').value);
   const moeda = document.getElementById('miner-moeda').value;
   const ativo = document.getElementById('miner-ativo').checked;
   const usar_rack = document.getElementById('miner-usar-rack').checked;
@@ -1746,17 +1941,19 @@ async function handleAddMiner(e){
   const poder_hs = paraHs(poder, unidade);
 
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, moeda, ativo, usar_rack, usar_cb, pode_vendido });
+    .from('miners').insert({ user_id: currentUser.id, nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb, pode_vendido });
 
   if (error){
     showToast('Erro ao adicionar minerador.');
     return false;
   }
+  await salvarNaBibliotecaSeNovo('miner', nome, 'miner-foto-data');
   document.getElementById('miner-nome').value = '';
   document.getElementById('miner-poder').value = '';
   document.getElementById('miner-bonus').value = '';
   document.getElementById('miner-slots-ocupados').value = '2';
   document.getElementById('miner-valor').value = '0';
+  document.getElementById('miner-valor-mercado').value = '0';
   document.getElementById('miner-foto-data').value = '';
   document.getElementById('miner-foto-preview').style.display = 'none';
   document.getElementById('miner-foto-preview').src = '';
@@ -1796,7 +1993,8 @@ async function duplicarMiner(id){
     poder_hs: original.poder_hs,
     bonus: original.bonus,
     slots_ocupados: original.slots_ocupados ?? 1,
-    valor: original.valor,
+    valor: 0,
+    valor_mercado: 0,
     moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
     usar_rack: original.usar_rack !== false,
@@ -1869,6 +2067,13 @@ function renderRacks(){
             </div>
           </div>
           <div class="field" style="margin-bottom:0;">
+            <label>Valor de mercado</label>
+            <div class="moeda-field">
+              <input type="number" step="any" min="0" id="edit-rack-valor-mercado-${r.id}" value="${r.valor_mercado ?? ''}" style="flex:1;">
+              <span class="hint" style="margin:0; text-align:left;">mesma moeda do valor pago</span>
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
             <label class="check-line"><input type="checkbox" id="edit-rack-ativo-${r.id}" ${r.ativo !== false ? 'checked' : ''}> Rack ativo</label>
             <label class="check-line"><input type="checkbox" id="edit-rack-pode-vendido-${r.id}" ${r.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
           </div>
@@ -1886,7 +2091,7 @@ function renderRacks(){
         ${r.foto ? `<img src="${r.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">▤</div>`}
         <div class="miner-info-text">
           <div class="name">${escapeHtml(r.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots ?? 4} slots</span> ${tagOff}</div>
-          <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor !== null && r.valor !== undefined ? ' · ' + fmtValorCompleto(r.valor) + ' ' + (r.moeda || 'RLT') : ''}</div>
+          <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor !== null && r.valor !== undefined ? ' · VP ' + fmtValorCompleto(r.valor) + ' ' + (r.moeda || 'RLT') : ''}${r.valor_mercado !== null && r.valor_mercado !== undefined ? ' · VM ' + fmtValorCompleto(r.valor_mercado) + ' ' + (r.moeda || 'RLT') : ''}</div>
         </div>
       </div>
       <div class="miner-actions">
@@ -1920,23 +2125,25 @@ async function saveRackEdit(id){
   const bonus = parseFloat(document.getElementById(`edit-rack-bonus-${id}`).value);
   const slots = parseInt(document.getElementById(`edit-rack-slots-${id}`).value, 10);
   const valor = parseFloat(document.getElementById(`edit-rack-valor-${id}`).value);
+  const valor_mercado = parseFloat(document.getElementById(`edit-rack-valor-mercado-${id}`).value);
   const moeda = document.getElementById(`edit-rack-moeda-${id}`).value;
   const ativo = document.getElementById(`edit-rack-ativo-${id}`).checked;
   const pode_vendido = document.getElementById(`edit-rack-pode-vendido-${id}`).checked;
 
-  if (!nome || isNaN(bonus) || isNaN(slots) || slots < 1 || isNaN(valor)){
+  if (!nome || isNaN(bonus) || isNaN(slots) || slots < 1 || isNaN(valor) || isNaN(valor_mercado)){
     showToast('Preencha todos os campos corretamente.');
     return;
   }
 
   const { error } = await supabaseClient
-    .from('racks').update({ nome, foto, bonus, slots, valor, moeda, ativo, pode_vendido }).eq('id', id);
+    .from('racks').update({ nome, foto, bonus, slots, valor, valor_mercado, moeda, ativo, pode_vendido }).eq('id', id);
 
   if (error){
     showToast('Erro ao salvar alterações.');
     return;
   }
   editingRackId = null;
+  await salvarNaBibliotecaSeNovo('rack', nome, `edit-rack-foto-data-${id}`);
   showToast('Rack atualizado.');
   await loadRacks();
 }
@@ -1948,21 +2155,24 @@ async function handleAddRack(e){
   const bonus = parseFloat(document.getElementById('rack-bonus').value);
   const slots = parseInt(document.getElementById('rack-slots').value, 10);
   const valor = parseFloat(document.getElementById('rack-valor').value);
+  const valor_mercado = parseFloat(document.getElementById('rack-valor-mercado').value);
   const moeda = document.getElementById('rack-moeda').value;
   const ativo = document.getElementById('rack-ativo').checked;
   const pode_vendido = document.getElementById('rack-pode-vendido').checked;
 
   const { error } = await supabaseClient
-    .from('racks').insert({ user_id: currentUser.id, nome, foto, bonus, slots, valor, moeda, ativo, pode_vendido });
+    .from('racks').insert({ user_id: currentUser.id, nome, foto, bonus, slots, valor, valor_mercado, moeda, ativo, pode_vendido });
 
   if (error){
     showToast('Erro ao adicionar rack.');
     return false;
   }
+  await salvarNaBibliotecaSeNovo('rack', nome, 'rack-foto-data');
   document.getElementById('rack-nome').value = '';
   document.getElementById('rack-bonus').value = '';
   document.getElementById('rack-slots').value = '4';
   document.getElementById('rack-valor').value = '0';
+  document.getElementById('rack-valor-mercado').value = '0';
   document.getElementById('rack-foto-data').value = '';
   document.getElementById('rack-foto-preview').style.display = 'none';
   document.getElementById('rack-foto-preview').src = '';
@@ -1999,7 +2209,8 @@ async function duplicarRack(id){
     foto: original.foto || null,
     bonus: original.bonus,
     slots: original.slots ?? 4,
-    valor: original.valor,
+    valor: 0,
+    valor_mercado: 0,
     moeda: original.moeda || 'RLT',
     ativo: original.ativo !== false,
     pode_vendido: original.pode_vendido === true,
