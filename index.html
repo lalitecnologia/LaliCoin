@@ -1016,7 +1016,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v64';
+const APP_VERSION = 'v65';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1465,7 +1465,9 @@ async function salvarConfiguracoes(){
   currentConfig = { ...currentConfig, dias_trial_free, valor_mensal, valor_trimestral, valor_anual, chave_pix, nome_recebedor, cidade_recebedor, permitir_catalogo_miners, permitir_catalogo_racks };
   showToast('Configuração salva.');
   renderPlanos('config-planos-preview');
-  atualizarVisibilidadeAbasCatalogo();
+  // Passa isCreator explicitamente — sem isso, quem está salvando (sempre o Criador) podia
+  // acabar com a própria aba escondida ao desativar a permissão pros usuários comuns.
+  atualizarVisibilidadeAbasCatalogo(currentProfile?.tipo === 'C');
 }
 
 function fmtMoeda(v){
