@@ -1026,7 +1026,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v60';
+const APP_VERSION = 'v61';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2217,10 +2217,11 @@ async function salvarEdicaoCatalogoMiner(id){
   }
   const poder_hs = paraHs(poder, unidade);
 
-  const { error } = await supabaseClient
-    .from('miners_catalogo').update({ nivel, nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, pode_vendido }).eq('id', id);
+  const { data, error } = await supabaseClient
+    .from('miners_catalogo').update({ nivel, nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados, pode_vendido }).eq('id', id).select();
 
-  if (error){ showToast('Erro ao salvar alterações.'); return; }
+  if (error){ showToast('Erro ao salvar alterações: ' + error.message); console.error('salvarEdicaoCatalogoMiner', error); return; }
+  if (!data || !data.length){ showToast('Nada foi salvo — provavelmente falta permissão (RLS) de UPDATE em miners_catalogo.'); return; }
   editingCatalogoMinerId = null;
   showToast('Minerador do catálogo atualizado.');
   await loadCatalogoMiners();
@@ -2405,10 +2406,11 @@ async function salvarEdicaoCatalogoRack(id){
     return;
   }
 
-  const { error } = await supabaseClient
-    .from('racks_catalogo').update({ nome, foto, slots, bonus, pode_vendido }).eq('id', id);
+  const { data, error } = await supabaseClient
+    .from('racks_catalogo').update({ nome, foto, slots, bonus, pode_vendido }).eq('id', id).select();
 
-  if (error){ showToast('Erro ao salvar alterações.'); return; }
+  if (error){ showToast('Erro ao salvar alterações: ' + error.message); console.error('salvarEdicaoCatalogoRack', error); return; }
+  if (!data || !data.length){ showToast('Nada foi salvo — provavelmente falta permissão (RLS) de UPDATE em racks_catalogo.'); return; }
   editingCatalogoRackId = null;
   showToast('Rack do catálogo atualizado.');
   await loadCatalogoRacks();
