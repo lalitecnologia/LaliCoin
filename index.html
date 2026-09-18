@@ -99,7 +99,7 @@
   .role-pill.plano-pago{color:var(--success); border-color:var(--success); background:rgba(76,175,109,0.08);}
 
   main{flex:1; padding:20px; padding-bottom:32px; max-width:820px; width:100%; margin:0 auto;}
-  main:has(#screen-anotacoes.active){max-width:1200px;}
+  main:has(#screen-anotacoes.active){max-width:1600px;}
   .screen{display:none; animation:fade .25s ease;}
   .screen.active{display:block;}
   @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
@@ -1016,7 +1016,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v62';
+const APP_VERSION = 'v63';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2636,8 +2636,13 @@ async function handleAddMiner(e){
     return false;
   }
 
+  // A coluna "nome" na tabela miners é legado (o nome de exibição hoje vem do catálogo, via
+  // catalogo_id), mas ainda tem NOT NULL no banco — por isso preenchemos com o nome do catálogo.
+  const catItem = catalogoMiners.find(c => c.id === catalogo_id);
+  const nome = catItem ? catItem.nome : '';
+
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, catalogo_id, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb });
+    .from('miners').insert({ user_id: currentUser.id, catalogo_id, nome, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb });
 
   if (error){
     errEl.textContent = 'Erro ao vincular minerador: ' + error.message;
@@ -2677,6 +2682,7 @@ async function duplicarMiner(id){
   const { error } = await supabaseClient.from('miners').insert({
     user_id: currentUser.id,
     catalogo_id: original.catalogo_id,
+    nome: original.nome,
     valor: 0,
     valor_mercado: 0,
     moeda: original.moeda || 'RLT',
@@ -2842,8 +2848,12 @@ async function handleAddRack(e){
     return false;
   }
 
+  // Idem miners: "nome" é coluna legada NOT NULL na tabela racks, preenchida com o nome do catálogo.
+  const catItem = catalogoRacks.find(c => c.id === catalogo_id);
+  const nome = catItem ? catItem.nome : '';
+
   const { error } = await supabaseClient
-    .from('racks').insert({ user_id: currentUser.id, catalogo_id, valor, valor_mercado, moeda, ativo });
+    .from('racks').insert({ user_id: currentUser.id, catalogo_id, nome, valor, valor_mercado, moeda, ativo });
 
   if (error){
     errEl.textContent = 'Erro ao vincular rack: ' + error.message;
@@ -2883,6 +2893,7 @@ async function duplicarRack(id){
   const { error } = await supabaseClient.from('racks').insert({
     user_id: currentUser.id,
     catalogo_id: original.catalogo_id,
+    nome: original.nome,
     valor: 0,
     valor_mercado: 0,
     moeda: original.moeda || 'RLT',
