@@ -1016,7 +1016,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v63';
+const APP_VERSION = 'v64';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2617,6 +2617,23 @@ async function saveMinerEdit(id){
   await loadMiners();
 }
 
+// Colunas legadas da tabela miners (nome, foto, poder, unidade, poder_hs, bonus, slots_ocupados,
+// pode_vendido) têm NOT NULL no banco, mas o app usa o valor "ao vivo" do catálogo via catalogo_id
+// (ver resolverMeuMiner). Por isso, ao inserir/duplicar, mandamos uma cópia (snapshot) desses campos
+// vinda do catálogo só pra satisfazer a constraint — a exibição real sempre vem do join com o catálogo.
+function snapshotCatalogoMiner(catItem){
+  return {
+    nome: catItem?.nome ?? '',
+    foto: catItem?.foto ?? null,
+    poder: catItem?.poder ?? 0,
+    unidade: catItem?.unidade ?? 'H/s',
+    poder_hs: catItem?.poder_hs ?? 0,
+    bonus: catItem?.bonus ?? 0,
+    slots_ocupados: catItem?.slots_ocupados ?? 1,
+    pode_vendido: catItem?.pode_vendido === true,
+  };
+}
+
 async function handleAddMiner(e){
   e.preventDefault();
   const errEl = document.getElementById('miner-error');
@@ -2637,12 +2654,12 @@ async function handleAddMiner(e){
   }
 
   // A coluna "nome" na tabela miners é legado (o nome de exibição hoje vem do catálogo, via
-  // catalogo_id), mas ainda tem NOT NULL no banco — por isso preenchemos com o nome do catálogo.
+  // catalogo_id), mas ainda tem NOT NULL no banco — por isso preenchemos com o snapshot do catálogo.
   const catItem = catalogoMiners.find(c => c.id === catalogo_id);
-  const nome = catItem ? catItem.nome : '';
+  const snapshot = snapshotCatalogoMiner(catItem);
 
   const { error } = await supabaseClient
-    .from('miners').insert({ user_id: currentUser.id, catalogo_id, nome, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb });
+    .from('miners').insert({ user_id: currentUser.id, catalogo_id, ...snapshot, valor, valor_mercado, moeda, ativo, usar_rack, usar_cb });
 
   if (error){
     errEl.textContent = 'Erro ao vincular minerador: ' + error.message;
@@ -2682,7 +2699,7 @@ async function duplicarMiner(id){
   const { error } = await supabaseClient.from('miners').insert({
     user_id: currentUser.id,
     catalogo_id: original.catalogo_id,
-    nome: original.nome,
+    ...snapshotCatalogoMiner(catalogoMiners.find(c => c.id === original.catalogo_id)),
     valor: 0,
     valor_mercado: 0,
     moeda: original.moeda || 'RLT',
@@ -2831,6 +2848,17 @@ async function saveRackEdit(id){
   await loadRacks();
 }
 
+// Idem miners: colunas legadas da tabela racks (nome, foto, slots, bonus, pode_vendido) com NOT NULL.
+function snapshotCatalogoRack(catItem){
+  return {
+    nome: catItem?.nome ?? '',
+    foto: catItem?.foto ?? null,
+    slots: catItem?.slots ?? 6,
+    bonus: catItem?.bonus ?? 0,
+    pode_vendido: catItem?.pode_vendido === true,
+  };
+}
+
 async function handleAddRack(e){
   e.preventDefault();
   const errEl = document.getElementById('rack-error');
@@ -2848,12 +2876,12 @@ async function handleAddRack(e){
     return false;
   }
 
-  // Idem miners: "nome" é coluna legada NOT NULL na tabela racks, preenchida com o nome do catálogo.
+  // Idem miners: "nome" e outras colunas legadas NOT NULL na tabela racks, preenchidas via snapshot.
   const catItem = catalogoRacks.find(c => c.id === catalogo_id);
-  const nome = catItem ? catItem.nome : '';
+  const snapshot = snapshotCatalogoRack(catItem);
 
   const { error } = await supabaseClient
-    .from('racks').insert({ user_id: currentUser.id, catalogo_id, nome, valor, valor_mercado, moeda, ativo });
+    .from('racks').insert({ user_id: currentUser.id, catalogo_id, ...snapshot, valor, valor_mercado, moeda, ativo });
 
   if (error){
     errEl.textContent = 'Erro ao vincular rack: ' + error.message;
@@ -2893,7 +2921,7 @@ async function duplicarRack(id){
   const { error } = await supabaseClient.from('racks').insert({
     user_id: currentUser.id,
     catalogo_id: original.catalogo_id,
-    nome: original.nome,
+    ...snapshotCatalogoRack(catalogoRacks.find(c => c.id === original.catalogo_id)),
     valor: 0,
     valor_mercado: 0,
     moeda: original.moeda || 'RLT',
