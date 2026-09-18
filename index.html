@@ -538,12 +538,21 @@
       <div class="card">
         <div class="section-title">Cadastrar minerador (catálogo global)</div>
         <p class="hint" style="text-align:left; margin-top:0;">
-          Este cadastro é <b>compartilhado entre todos os usuários</b> — cada nome só existe uma vez aqui.
+          Este cadastro é <b>compartilhado entre todos os usuários</b> — cada combinação de nome + nível
+          só existe uma vez aqui (o mesmo nome pode ter um cadastro por nível).
           Depois de cadastrado, qualquer usuário pode vincular este item em "Meus Miners". Para alterar
           poder, bônus, imagem etc. de um item já existente, edite-o aqui — a alteração vale pra todo
           mundo que já vinculou esse minerador.
         </p>
         <form onsubmit="return handleAddCatalogoMiner(event)">
+          <div class="field">
+            <label>Foto do minerador</label>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <img id="cat-miner-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-miner-foto-preview', 'cat-miner-foto-data')">
+            </div>
+            <input type="hidden" id="cat-miner-foto-data">
+          </div>
           <div class="field">
             <label>Nível</label>
             <select id="cat-miner-nivel">
@@ -572,14 +581,6 @@
           <div class="field">
             <label>Nome do minerador</label>
             <input type="text" id="cat-miner-nome" required placeholder="Ex: ShaleRig III">
-          </div>
-          <div class="field">
-            <label>Foto do minerador</label>
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <img id="cat-miner-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-miner-foto-preview', 'cat-miner-foto-data')">
-            </div>
-            <input type="hidden" id="cat-miner-foto-data">
           </div>
           <div class="field">
             <label>Poder</label>
@@ -625,16 +626,13 @@
       <div class="card">
         <div class="section-title">Cadastrar rack (catálogo global)</div>
         <p class="hint" style="text-align:left; margin-top:0;">
-          Este cadastro é <b>compartilhado entre todos os usuários</b> — cada nome só existe uma vez aqui.
+          Este cadastro é <b>compartilhado entre todos os usuários</b> — cada combinação de nome + número
+          de slots só existe uma vez aqui (o mesmo nome pode ter um cadastro de 6 e outro de 8 slots).
           Depois de cadastrado, qualquer usuário pode vincular este item em "Meus Racks". Para alterar
           bônus, imagem etc. de um item já existente, edite-o aqui — a alteração vale pra todo mundo
           que já vinculou esse rack.
         </p>
         <form onsubmit="return handleAddCatalogoRack(event)">
-          <div class="field">
-            <label>Nome do rack</label>
-            <input type="text" id="cat-rack-nome" required placeholder="Ex: Regular Rack 8">
-          </div>
           <div class="field">
             <label>Foto do rack</label>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
@@ -642,6 +640,10 @@
               <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-rack-foto-preview', 'cat-rack-foto-data')">
             </div>
             <input type="hidden" id="cat-rack-foto-data">
+          </div>
+          <div class="field">
+            <label>Nome do rack</label>
+            <input type="text" id="cat-rack-nome" required placeholder="Ex: Regular Rack 8">
           </div>
           <div class="field">
             <label>Número de slots</label>
@@ -1024,7 +1026,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v58';
+const APP_VERSION = 'v60';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1244,6 +1246,18 @@ function poderHsAtual(m){
 // evitando que "Red Silk" e "red silk " sejam tratados como miners diferentes
 function chaveNome(nome){
   return (nome || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Chave composta do catálogo de miners: mesmo nome pode repetir em níveis diferentes
+// (ex: "ShaleRig" nível I e "ShaleRig" nível III são miners distintos)
+function chaveMiner(nome, nivel){
+  return chaveNome(nome) + '|' + (nivel || '');
+}
+
+// Chave composta do catálogo de racks: mesmo nome pode repetir em quantidades de slot diferentes
+// (ex: "Regular Rack" com 6 slots e "Regular Rack" com 8 slots são racks distintos)
+function chaveRack(nome, slots){
+  return chaveNome(nome) + '|' + (slots ?? '');
 }
 
 // Poder do miner já com o bônus individual aplicado — critério usado para ordenar
@@ -2197,8 +2211,8 @@ async function salvarEdicaoCatalogoMiner(id){
     showToast('Preencha todos os campos corretamente.');
     return;
   }
-  if (catalogoMiners.some(c => c.id !== id && chaveNome(c.nome) === chaveNome(nome))){
-    showToast('Já existe outro minerador cadastrado com esse nome.');
+  if (catalogoMiners.some(c => c.id !== id && chaveMiner(c.nome, c.nivel) === chaveMiner(nome, nivel))){
+    showToast('Já existe outro minerador cadastrado com esse nome e nível.');
     return;
   }
   const poder_hs = paraHs(poder, unidade);
@@ -2227,8 +2241,8 @@ async function handleAddCatalogoMiner(e){
   const slots_ocupados = parseInt(document.getElementById('cat-miner-slots').value, 10);
   const pode_vendido = document.getElementById('cat-miner-pode-vendido').checked;
 
-  if (catalogoMiners.some(c => chaveNome(c.nome) === chaveNome(nome))){
-    errEl.textContent = 'Já existe um minerador cadastrado com esse nome.';
+  if (catalogoMiners.some(c => chaveMiner(c.nome, c.nivel) === chaveMiner(nome, nivel))){
+    errEl.textContent = 'Já existe um minerador cadastrado com esse nome e nível.';
     errEl.style.display = 'block';
     return false;
   }
@@ -2386,8 +2400,8 @@ async function salvarEdicaoCatalogoRack(id){
     showToast('Preencha todos os campos corretamente.');
     return;
   }
-  if (catalogoRacks.some(c => c.id !== id && chaveNome(c.nome) === chaveNome(nome))){
-    showToast('Já existe outro rack cadastrado com esse nome.');
+  if (catalogoRacks.some(c => c.id !== id && chaveRack(c.nome, c.slots) === chaveRack(nome, slots))){
+    showToast('Já existe outro rack cadastrado com esse nome e número de slots.');
     return;
   }
 
@@ -2412,8 +2426,8 @@ async function handleAddCatalogoRack(e){
   const bonus = parseFloat(document.getElementById('cat-rack-bonus').value);
   const pode_vendido = document.getElementById('cat-rack-pode-vendido').checked;
 
-  if (catalogoRacks.some(c => chaveNome(c.nome) === chaveNome(nome))){
-    errEl.textContent = 'Já existe um rack cadastrado com esse nome.';
+  if (catalogoRacks.some(c => chaveRack(c.nome, c.slots) === chaveRack(nome, slots))){
+    errEl.textContent = 'Já existe um rack cadastrado com esse nome e número de slots.';
     errEl.style.display = 'block';
     return false;
   }
