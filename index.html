@@ -821,7 +821,9 @@
           prioridade e escolhem primeiro os melhores mineradores disponíveis (em caso de empate no bônus,
           o rack com mais slots vem primeiro); um minerador só pode ocupar um rack por vez, mesmo que haja
           outro minerador de mesmo nome disponível. Para cada rack, o cálculo soma o poder dos mineradores
-          escolhidos e aplica sobre esse total o bônus dos mineradores somado ao bônus do próprio rack.
+          escolhidos e aplica sobre esse total o bônus dos mineradores somado ao bônus do próprio rack. Se
+          "Separar mineradores de mesmo nome em racks diferentes" estiver ativada na Configuração, dois
+          mineradores de mesmo nome nunca vão pro mesmo rack.
         </p>
       </div>
 
@@ -951,6 +953,19 @@
         </div>
       </div>
 
+      <div class="card">
+        <div class="section-title">Cálculo de distribuição</div>
+        <p class="hint" style="margin-bottom:14px; text-align:left;">
+          No jogo, dois mineradores de mesmo nome no mesmo rack não somam os dois bônus (só um deles
+          conta, o poder soma normal). Com esta opção ativada, o cálculo nunca coloca dois mineradores
+          de mesmo nome no mesmo rack — se houver mais de um disponível, eles são espalhados em racks
+          diferentes pra cada bônus contar. Fica ativada por padrão em cadastros novos.
+        </p>
+        <div class="field">
+          <label class="check-line"><input type="checkbox" id="config-separar-mesmo-nome" checked onchange="salvarPreferenciaDistribuicao()"> Separar mineradores de mesmo nome em racks diferentes</label>
+        </div>
+      </div>
+
       <div class="card" id="config-planos-card" style="display:none;">
         <div class="section-title">Planos e pagamento (somente Criador)</div>
         <p class="hint" style="margin-bottom:14px; text-align:left;">
@@ -1016,7 +1031,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v66';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1827,6 +1842,21 @@ async function selecionarTema(tema){
   showToast('Tema salvo.');
 }
 
+// Preferência por usuário (coluna em profiles, default true quando ainda não existe/não foi
+// definida — vale tanto pra cadastro novo quanto pra quem já tinha conta antes desta opção existir).
+async function salvarPreferenciaDistribuicao(){
+  if (!currentUser) return;
+  const separar_mesmo_nome_racks = document.getElementById('config-separar-mesmo-nome').checked;
+  const { error } = await supabaseClient.from('profiles').update({ separar_mesmo_nome_racks }).eq('id', currentUser.id);
+  if (error){
+    showToast('Não foi possível salvar essa preferência agora.');
+    document.getElementById('config-separar-mesmo-nome').checked = currentProfile?.separar_mesmo_nome_racks !== false;
+    return;
+  }
+  currentProfile = { ...currentProfile, separar_mesmo_nome_racks };
+  showToast('Preferência salva.');
+}
+
 async function handleSalvarPerfil(e){
   e.preventDefault();
   const errEl = document.getElementById('perfil-error');
@@ -2013,6 +2043,7 @@ async function onAuthReady(user){
 
   popularSelectsMoeda();
   aplicarTema(profile?.tema || 'escuro');
+  document.getElementById('config-separar-mesmo-nome').checked = profile?.separar_mesmo_nome_racks !== false;
   await loadCatalogoMiners();
   await loadCatalogoRacks();
   await loadMiners();
@@ -3169,36 +3200,70 @@ function combinacoes(arr, k){
 // a ordem, somamos o poder+bônus dos dois mineradores de 1 slot (os melhores disponíveis, em
 // pares) e comparamos esse total com o poder+bônus de cada minerador de 2 slots. A prateleira
 // de maior valor combinado é preenchida primeiro, e assim por diante até a capacidade do rack.
-function montarRackGreedy(minersDisponiveis, capacidade){
+// Agrupa os mineradores de 1 slot em pares pra dividir prateleira, sempre tentando juntar os
+// dois melhores disponíveis — mas, quando respeitarNomeUnico está ativo, nunca junta dois do
+// mesmo nome na mesma prateleira (no jogo isso faz um dos dois bônus não contar). Quando o
+// próximo da fila tem o mesmo nome do parceiro escolhido, pula pro próximo nome diferente.
+function parearSimples(lista, respeitarNomeUnico){
+  const restantes = [...lista];
+  const pares = [];
+  while (restantes.length){
+    const a = restantes.shift();
+    if (!respeitarNomeUnico){
+      const b = restantes.shift();
+      pares.push(b ? { valor: scoreMiner(a) + scoreMiner(b), miners: [a, b] } : { valor: scoreMiner(a), miners: [a] });
+      continue;
+    }
+    const idxParceiro = restantes.findIndex(m => (m.nome || '') !== (a.nome || ''));
+    if (idxParceiro === -1){
+      pares.push({ valor: scoreMiner(a), miners: [a] }); // só sobraram do mesmo nome: fica sozinho
+      continue;
+    }
+    const b = restantes.splice(idxParceiro, 1)[0];
+    pares.push({ valor: scoreMiner(a) + scoreMiner(b), miners: [a, b] });
+  }
+  return pares;
+}
+
+// Monta o preenchimento de um rack comparando o valor de cada PRATELEIRA (não de cada
+// minerador isolado): um minerador de 2 slots ocupa uma prateleira inteira sozinho, e dois
+// mineradores de 1 slot juntos também ocupam uma prateleira inteira — então antes de decidir
+// a ordem, somamos o poder+bônus dos dois mineradores de 1 slot (os melhores disponíveis, em
+// pares) e comparamos esse total com o poder+bônus de cada minerador de 2 slots. A prateleira
+// de maior valor combinado é preenchida primeiro, e assim por diante até a capacidade do rack.
+//
+// respeitarNomeUnico (opção do usuário, ativada por padrão): quando true, dois mineradores de
+// mesmo nome nunca vão pro mesmo rack — se aparecer um conflito, a opção é pulada (o minerador
+// fica disponível pro próximo rack, de menor prioridade) e o cálculo tenta a próxima melhor
+// opção de prateleira que não repita nome já usado neste rack.
+function montarRackGreedy(minersDisponiveis, capacidade, respeitarNomeUnico){
   const numPrateleiras = Math.ceil(capacidade / 2);
   const slots = new Array(capacidade).fill(null);
   const escolhidos = [];
 
-  // minersDisponiveis já chega ordenado do maior poder+bônus pro menor
   const duplos = minersDisponiveis.filter(m => (Number(m.slots_ocupados) || 1) >= 2);
   const simples = minersDisponiveis.filter(m => (Number(m.slots_ocupados) || 1) < 2);
 
   // cada minerador de 2 slots é uma opção de prateleira sozinho; cada par de mineradores de
-  // 1 slot (os melhores primeiro) também é uma opção — se sobrar um sozinho, ele ocupa a
-  // prateleira sozinho (deixando a outra metade vazia)
+  // 1 slot (os melhores primeiro, sem repetir nome se a opção estiver ativa) também é uma opção
   const opcoes = [];
   for (const m of duplos){
     opcoes.push({ valor: scoreMiner(m), miners: [m] });
   }
-  for (let i = 0; i < simples.length; i += 2){
-    const a = simples[i];
-    const b = simples[i + 1];
-    opcoes.push(b
-      ? { valor: scoreMiner(a) + scoreMiner(b), miners: [a, b] }
-      : { valor: scoreMiner(a), miners: [a] });
-  }
+  opcoes.push(...parearSimples(simples, respeitarNomeUnico));
 
   // ordena as opções de prateleira pelo valor combinado, maior pra menor
   opcoes.sort((x, y) => y.valor - x.valor);
 
+  const nomesUsados = new Set();
   let prateleiraAtual = 0;
   for (const op of opcoes){
     if (prateleiraAtual >= numPrateleiras) break;
+
+    if (respeitarNomeUnico && op.miners.some(m => nomesUsados.has(m.nome))){
+      continue; // conflito de nome com algo já colocado neste rack — deixa pro próximo rack
+    }
+
     const posicao = prateleiraAtual * 2;
     const ehDuplo = op.miners.length === 1 && (Number(op.miners[0].slots_ocupados) || 1) >= 2;
 
@@ -3216,6 +3281,7 @@ function montarRackGreedy(minersDisponiveis, capacidade){
     }
 
     escolhidos.push(...op.miners);
+    op.miners.forEach(m => nomesUsados.add(m.nome));
     prateleiraAtual++;
   }
 
@@ -3250,6 +3316,9 @@ function calcularMelhorRack(){
     .filter(m => m.usar_rack !== false && m.ativo !== false)
     .sort((a, b) => scoreMiner(b) - scoreMiner(a));
 
+  // opção do usuário (Configuração > Cálculo de distribuição), ativada por padrão
+  const respeitarNomeUnico = currentProfile?.separar_mesmo_nome_racks !== false;
+
   const resultadosPorRack = [];
 
   for (const rack of racksAtivos){
@@ -3260,7 +3329,7 @@ function calcularMelhorRack(){
       continue;
     }
 
-    const { slots, escolhidos } = montarRackGreedy(poolMiners, capacidade);
+    const { slots, escolhidos } = montarRackGreedy(poolMiners, capacidade, respeitarNomeUnico);
 
     if (!escolhidos.length){
       resultadosPorRack.push({ rack, semCombinacao: true });
