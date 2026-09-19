@@ -1092,11 +1092,11 @@
       <div class="card" id="config-help-memo-card" style="display:none;">
         <div class="section-title">Memo do Help (somente Criador)</div>
         <p class="hint" style="margin-bottom:10px; text-align:left;">
-          Este texto aparece, somente para leitura, em Help › Explicativo do sistema. Use
+          Este é o mesmo texto de Help › Explicativo do sistema (lá o Criador também pode editar; o usuário só lê). Use
           <b># Título</b>, <b>## Seção</b> e <b>- item</b> para listas; uma linha em branco separa parágrafos.
         </p>
         <textarea id="config-help-memo" class="textarea-campo" rows="18" placeholder="Explicação e objetivo de cada item do sistema..."></textarea>
-        <button type="button" class="btn btn-primary" style="margin-top:12px;" onclick="salvarHelpMemo()">Salvar memo do Help</button>
+        <button type="button" class="btn btn-primary" style="margin-top:12px;" onclick="salvarHelpMemo('config-help-memo')">Salvar memo do Help</button>
         <div class="error-msg" id="config-help-error"></div>
       </div>
 
@@ -1109,7 +1109,18 @@
     <!-- HELP › EXPLICATIVO DO SISTEMA (somente leitura) -->
     <section id="screen-help-explicativo" class="screen">
       <div class="subtabs" data-grupo="help"></div>
+      <div class="card" id="help-editor-card" style="display:none;">
+        <div class="section-title">Editar explicativo (somente Criador)</div>
+        <p class="hint" style="margin-bottom:10px; text-align:left;">
+          Os usuários comuns só leem este texto. Use <b># Título</b>, <b>## Seção</b> e <b>- item</b> para
+          listas; uma linha em branco separa parágrafos.
+        </p>
+        <textarea id="help-memo-editor" class="textarea-campo" rows="18" oninput="atualizarVisualizacaoHelp()" placeholder="Explicação e objetivo de cada item do sistema..."></textarea>
+        <button type="button" class="btn btn-primary" style="margin-top:12px;" onclick="salvarHelpMemo('help-memo-editor')">Salvar explicativo</button>
+        <div class="error-msg" id="help-memo-error"></div>
+      </div>
       <div class="card">
+        <div class="section-title" id="help-visualizacao-titulo" style="display:none;">Visualização</div>
         <div id="help-explicativo-conteudo"><div class="empty-state">Carregando...</div></div>
       </div>
     </section>
@@ -1158,7 +1169,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v71';
+const APP_VERSION = 'v72';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2141,17 +2152,18 @@ function renderConfigPlanosUsuario(){
 }
 
 /* ---------------- Memo do Help (Criador edita; todos leem em Help) ---------------- */
-async function salvarHelpMemo(){
+async function salvarHelpMemo(idCampo){
   if (currentProfile?.tipo !== 'C') return;
-  const help_memo = document.getElementById('config-help-memo').value;
-  const errEl = document.getElementById('config-help-error');
+  idCampo = idCampo || 'config-help-memo';
+  const help_memo = document.getElementById(idCampo).value;
+  const errEl = document.getElementById(idCampo === 'config-help-memo' ? 'config-help-error' : 'help-memo-error');
   errEl.style.display = 'none';
 
   const { data, error } = await supabaseClient.from('configuracoes')
     .update({ help_memo, updated_at: new Date().toISOString() }).eq('id', 1).select();
 
   if (error){
-    errEl.textContent = 'Erro ao salvar o memo: ' + error.message + ' — a coluna help_memo já existe na tabela configuracoes? (rode o SQL da v71)';
+    errEl.textContent = 'Erro ao salvar o texto: ' + error.message + ' — a coluna help_memo já existe na tabela configuracoes? (rode o SQL da v71)';
     errEl.style.display = 'block';
     return;
   }
@@ -2161,7 +2173,11 @@ async function salvarHelpMemo(){
     return;
   }
   currentConfig = { ...currentConfig, help_memo };
-  showToast('Memo do Help salvo.');
+  // mantém os dois editores (Configuração e Help) e a visualização em sincronia
+  const cfg = document.getElementById('config-help-memo'); if (cfg) cfg.value = help_memo;
+  const ed = document.getElementById('help-memo-editor'); if (ed) ed.value = help_memo;
+  atualizarVisualizacaoHelp();
+  showToast('Explicativo do sistema salvo.');
 }
 
 // formatação simples do memo: "# Título", "## Seção", "- item" e parágrafos separados por linha em branco
@@ -2185,12 +2201,25 @@ function formatarMemoHelp(texto){
   return html;
 }
 
-async function renderHelpExplicativo(){
+// mostra o texto formatado; no editor do Criador acompanha o que está sendo digitado
+function atualizarVisualizacaoHelp(){
   const box = document.getElementById('help-explicativo-conteudo');
   if (!box) return;
-  await carregarConfiguracoes(); // garante a versão mais recente do memo
-  const memo = (currentConfig?.help_memo || '').trim();
+  const isCreator = currentProfile?.tipo === 'C';
+  const editor = document.getElementById('help-memo-editor');
+  const memo = ((isCreator && editor) ? editor.value : (currentConfig?.help_memo || '')).trim();
   box.innerHTML = memo ? formatarMemoHelp(memo) : '<div class="empty-state">O explicativo do sistema ainda não foi publicado.</div>';
+}
+
+async function renderHelpExplicativo(){
+  const isCreator = currentProfile?.tipo === 'C';
+  await carregarConfiguracoes(); // garante a versão mais recente do texto
+
+  // Criador edita; usuário comum só lê
+  document.getElementById('help-editor-card').style.display = isCreator ? 'block' : 'none';
+  document.getElementById('help-visualizacao-titulo').style.display = isCreator ? 'block' : 'none';
+  if (isCreator) document.getElementById('help-memo-editor').value = currentConfig?.help_memo || '';
+  atualizarVisualizacaoHelp();
 }
 
 /* ---------------- Contato (usuário envia; Criador visualiza, responde ou exclui) ---------------- */
