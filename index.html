@@ -123,10 +123,10 @@
   .role-pill.plano-pago{color:var(--success); border-color:var(--success); background:rgba(76,175,109,0.08);}
 
   main{flex:1; padding:20px; padding-bottom:32px; max-width:820px; width:100%; margin:0 auto;}
-  /* larguras: Anotações é a mais larga; Cadastro (Miners/Racks), Meus Miners, Meus Racks,
-     Perfil e Configuração compartilham o mesmo padrão (ajuste só o valor abaixo) */
+  /* larguras: Cadastro (Miners/Racks), Meus Miners, Meus Racks, Anotações, Perfil e
+     Configuração compartilham o mesmo padrão (ajuste só o valor abaixo) */
   :root{--largura-padrao-telas:1100px;}
-  main:has(#screen-anotacoes.active){max-width:1600px;}
+  main:has(#screen-anotacoes.active),
   main:has(#screen-catalogo-miners.active),
   main:has(#screen-catalogo-racks.active),
   main:has(#screen-miners.active),
@@ -1164,7 +1164,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v74';
+const APP_VERSION = 'v76';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2397,7 +2397,8 @@ async function selecionarTema(tema){
   if (!currentUser) return;
   const { error } = await supabaseClient.from('profiles').update({ tema }).eq('id', currentUser.id);
   if (error){
-    showToast('Não foi possível salvar o tema, mas ele continua aplicado agora.');
+    console.error('Erro ao salvar o tema:', error);
+    showToast('Não foi possível salvar o tema (' + error.message + '). Ele continua aplicado agora.');
     return;
   }
   currentProfile = { ...currentProfile, tema };
