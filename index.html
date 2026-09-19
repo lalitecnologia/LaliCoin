@@ -123,10 +123,16 @@
   .role-pill.plano-pago{color:var(--success); border-color:var(--success); background:rgba(76,175,109,0.08);}
 
   main{flex:1; padding:20px; padding-bottom:32px; max-width:820px; width:100%; margin:0 auto;}
-  /* telas largas: Anotações e Cadastro (Miners / Racks) usam a mesma largura */
-  main:has(#screen-anotacoes.active),
+  /* larguras: Anotações é a mais larga; Cadastro (Miners/Racks), Meus Miners, Meus Racks,
+     Perfil e Configuração compartilham o mesmo padrão (ajuste só o valor abaixo) */
+  :root{--largura-padrao-telas:1100px;}
+  main:has(#screen-anotacoes.active){max-width:1600px;}
   main:has(#screen-catalogo-miners.active),
-  main:has(#screen-catalogo-racks.active){max-width:1600px;}
+  main:has(#screen-catalogo-racks.active),
+  main:has(#screen-miners.active),
+  main:has(#screen-rack.active),
+  main:has(#screen-perfil.active),
+  main:has(#screen-configuracao.active){max-width:var(--largura-padrao-telas);}
   .screen{display:none; animation:fade .25s ease;}
   .screen.active{display:block;}
   @keyframes fade{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
@@ -1158,7 +1164,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v73';
+const APP_VERSION = 'v74';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
