@@ -49,6 +49,30 @@
       radial-gradient(circle at 100% 0%, rgba(78,156,149,0.04), transparent 45%),
       var(--bg);
   }
+  /* Tema azul — fundo claro com tons de azul no lugar do dourado */
+  body.tema-azul{
+    --bg:#EFF5FB;
+    --surface:#FFFFFF;
+    --surface-2:#E3EEF9;
+    --border:#CBDDEF;
+    --gold:#2E7DD1;
+    --gold-dim:#8FB8E3;
+    --teal:#3FA9C9;
+    --text:#1F2B3A;
+    --muted:#61748A;
+    --danger:#C9564C;
+    --success:#3E9A6D;
+    --header-bg:rgba(255,255,255,0.92);
+  }
+  body.tema-azul .coin{
+    box-shadow:0 0 10px rgba(46,125,209,0.25);
+  }
+  body.tema-azul{
+    background:
+      radial-gradient(circle at 20% -10%, rgba(46,125,209,0.06), transparent 40%),
+      radial-gradient(circle at 100% 0%, rgba(63,169,201,0.05), transparent 45%),
+      var(--bg);
+  }
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{height:100%;}
   body{
@@ -314,6 +338,10 @@
   }
   .status-pill.pendente{color:var(--danger); border:1px solid var(--danger); background:rgba(225,85,74,0.1);}
   .status-pill.liberado{color:var(--success); border:1px solid var(--success); background:rgba(76,175,109,0.1);}
+  .aviso-pagamento-banner{
+    font-size:12px; line-height:1.5; color:var(--text); background:rgba(232,185,62,0.12);
+    border:1px solid var(--gold-dim); border-radius:10px; padding:8px 10px; margin-bottom:12px;
+  }
 
   /* ---------- Biblioteca pública de imagens ---------- */
   .img-hint{
@@ -351,7 +379,7 @@
     vertical-align:middle;
   }
 
-  .tema-opcoes{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .tema-opcoes{display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px;}
   .tema-card{
     background:var(--surface-2); border:2px solid var(--border); border-radius:12px;
     padding:14px; text-align:left; transition:border-color .15s;
@@ -363,11 +391,14 @@
   }
   .tema-preview-escuro{background:#0B0E14;}
   .tema-preview-claro{background:#F5F6F8; border-color:#E1E4E9;}
+  .tema-preview-azul{background:#EFF5FB; border-color:#CBDDEF;}
   .tema-preview-dot{width:12px; height:12px; border-radius:50%;}
   .tema-preview-dot-gold{background:#E8B93E;}
   .tema-preview-dot-teal{background:#3EC6C0;}
   .tema-preview-claro .tema-preview-dot-gold{background:#C9A227;}
   .tema-preview-claro .tema-preview-dot-teal{background:#4E9C95;}
+  .tema-preview-azul .tema-preview-dot-gold{background:#2E7DD1;}
+  .tema-preview-azul .tema-preview-dot-teal{background:#3FA9C9;}
   .tema-nome{font-weight:600; font-size:14px; color:var(--text);}
   .tema-desc{font-size:12px; color:var(--muted); margin-top:2px;}
 
@@ -485,8 +516,8 @@
         <div class="brand-name">LaliCoin</div>
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
-        <span class="version-tag-top" id="version-tag-app"></span>
         <span class="role-pill" id="plano-pill" style="display:none;"></span>
+        <span class="version-tag-top" id="version-tag-app"></span>
         <span class="role-pill" id="role-pill">U</span>
         <button class="icon-btn" onclick="handleLogout()" title="Sair">⏻</button>
       </div>
@@ -521,10 +552,7 @@
         <span class="ic">✎</span>Anotações
       </button>
       <button class="tab-btn" data-screen="perfil" onclick="switchScreen('perfil')">
-        <span class="ic">◎</span>Perfil
-      </button>
-      <button class="tab-btn" data-screen="usuarios" id="tab-usuarios" onclick="switchScreen('usuarios')" style="display:none;">
-        <span class="ic">👥</span>Usuários<span class="tab-badge" id="badge-usuarios" style="display:none; margin-left:4px;"></span>
+        <span class="ic">◎</span>Perfil<span class="tab-badge" id="badge-usuarios" style="display:none; margin-left:4px;"></span>
       </button>
       <button class="tab-btn" data-screen="configuracao" onclick="switchScreen('configuracao')">
         <span class="ic">⚙</span>Configuração
@@ -912,11 +940,9 @@
         </form>
       </div>
       <button class="btn btn-ghost" onclick="handleLogout()">Sair da conta</button>
-    </section>
 
-    <!-- USUÁRIOS (somente Criador) -->
-    <section id="screen-usuarios" class="screen">
-      <div class="card">
+      <!-- Só aparece pro Criador: além do próprio perfil, ele também vê e altera o de todos -->
+      <div class="card" id="perfil-usuarios-card" style="display:none;">
         <div class="section-title">Todos os usuários</div>
         <p class="hint" style="margin-bottom:10px; text-align:left;">
           Como Criador, você pode ver e alterar os dados de qualquer usuário aqui, incluindo liberar
@@ -949,6 +975,14 @@
             </div>
             <div class="tema-nome">Claro</div>
             <div class="tema-desc">Fundo claro, cores mais suaves</div>
+          </button>
+          <button type="button" class="tema-card" id="tema-opcao-azul" onclick="selecionarTema('azul')">
+            <div class="tema-preview tema-preview-azul">
+              <span class="tema-preview-dot tema-preview-dot-gold"></span>
+              <span class="tema-preview-dot tema-preview-dot-teal"></span>
+            </div>
+            <div class="tema-nome">Azul</div>
+            <div class="tema-desc">Fundo claro, tons de azul</div>
           </button>
         </div>
       </div>
@@ -1031,7 +1065,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v66';
+const APP_VERSION = 'v68';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1545,9 +1579,10 @@ function copiarPixCode(id){
 
 // Renderiza os 3 planos + QR code do Pix dentro do elemento com o id informado —
 // usado tanto na tela de cadastro pendente quanto na pré-visualização da Configuração
-function renderPlanos(containerId){
+function renderPlanos(containerId, opts){
   const box = document.getElementById(containerId);
   if (!box) return;
+  const avisoBotao = opts?.avisoBotao === true;
   const c = currentConfig || {};
   const payload = gerarPayloadPix();
   const qrId = containerId + '-qrcode';
@@ -1583,12 +1618,76 @@ function renderPlanos(containerId){
         ` : `<p class="hint">Chave Pix ainda não configurada pelo Criador.</p>`}
       </div>
     </div>
+    ${avisoBotao ? `
+    <div class="card">
+      <div class="section-title">Já fez o pagamento?</div>
+      <p class="hint" style="text-align:left; margin-bottom:12px;">
+        Depois de pagar pelo Pix acima, escolha o plano pago e avise. O Criador confirma o
+        recebimento e libera seu acesso assim que possível.
+      </p>
+      <div class="field">
+        <label>Plano pago</label>
+        <select id="aviso-pagamento-plano">
+          <option value="mensal">Mensal</option>
+          <option value="trimestral">Trimestral</option>
+          <option value="anual">Anual</option>
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary" id="aviso-pagamento-btn" onclick="avisarPagamento()">Avisar que paguei</button>
+      <p class="hint" id="aviso-pagamento-status" style="display:none; text-align:left; margin-top:10px;"></p>
+    </div>
+    ` : ''}
   `;
 
   if (payload && window.QRCode){
     new QRCode(document.getElementById(qrId), {
       text: payload, width: 180, height: 180, colorDark: '#0B0E14', colorLight: '#FFFFFF',
     });
+  }
+
+  if (avisoBotao) mostrarStatusAvisoPagamento();
+}
+
+// Avisa o Criador (via profiles) que o usuário pendente afirma ter feito o Pix — o Criador
+// confirma manualmente (batendo com o extrato) e libera o acesso na tela de Perfil.
+async function avisarPagamento(){
+  if (!currentUser) return;
+  const select = document.getElementById('aviso-pagamento-plano');
+  const btn = document.getElementById('aviso-pagamento-btn');
+  if (!select || !btn) return;
+  const plano = select.value;
+  btn.disabled = true;
+
+  const aviso_pagamento_em = new Date().toISOString();
+  const { error } = await supabaseClient.from('profiles')
+    .update({ aviso_pagamento_plano: plano, aviso_pagamento_em }).eq('id', currentUser.id);
+
+  if (error){
+    showToast('Não foi possível avisar agora. Tente de novo em instantes.');
+    btn.disabled = false;
+    return;
+  }
+
+  currentProfile = { ...currentProfile, aviso_pagamento_plano: plano, aviso_pagamento_em };
+  mostrarStatusAvisoPagamento();
+  showToast('Aviso enviado! Assim que o Criador confirmar o pagamento, seu acesso é liberado.');
+}
+
+function mostrarStatusAvisoPagamento(){
+  const status = document.getElementById('aviso-pagamento-status');
+  const btn = document.getElementById('aviso-pagamento-btn');
+  if (!status || !btn) return;
+  if (currentProfile?.aviso_pagamento_em){
+    const nomes = { mensal: 'Mensal', trimestral: 'Trimestral', anual: 'Anual' };
+    const nomePlano = nomes[currentProfile.aviso_pagamento_plano] || currentProfile.aviso_pagamento_plano || '';
+    status.textContent = `Aviso enviado (${nomePlano}) em ${new Date(currentProfile.aviso_pagamento_em).toLocaleString('pt-BR')}. Aguardando confirmação do Criador.`;
+    status.style.display = 'block';
+    btn.textContent = 'Avisar novamente';
+    btn.disabled = false;
+    const select = document.getElementById('aviso-pagamento-plano');
+    if (select && currentProfile.aviso_pagamento_plano) select.value = currentProfile.aviso_pagamento_plano;
+  } else {
+    status.style.display = 'none';
   }
 }
 
@@ -1640,12 +1739,20 @@ async function ativarTrialGratis(){
 /* ---------------- Usuários (painel do Criador) ---------------- */
 async function loadUsuarios(){
   const { data, error } = await supabaseClient.from('profiles').select('*').order('nome', { ascending: true });
-  allProfiles = data || [];
+  allProfiles = (data || []).slice().sort((a, b) => {
+    // quem avisou pagamento e ainda não foi liberado sobe pro topo (aviso mais recente primeiro)
+    const avisoA = a.aviso_pagamento_em && a.liberado !== true ? new Date(a.aviso_pagamento_em).getTime() : 0;
+    const avisoB = b.aviso_pagamento_em && b.liberado !== true ? new Date(b.aviso_pagamento_em).getTime() : 0;
+    if (avisoA !== avisoB) return avisoB - avisoA;
+    return (a.nome || '').localeCompare(b.nome || '');
+  });
 
   const pendentes = allProfiles.filter(p => p.tipo !== 'C' && p.liberado !== true);
+  const avisosPagamento = allProfiles.filter(p => p.aviso_pagamento_em && p.liberado !== true).length;
   const badge = document.getElementById('badge-usuarios');
-  if (pendentes.length){
-    badge.textContent = pendentes.length;
+  const totalBadge = pendentes.length + avisosPagamento;
+  if (totalBadge){
+    badge.textContent = totalBadge;
     badge.style.display = 'inline-block';
   } else {
     badge.style.display = 'none';
@@ -1670,6 +1777,13 @@ function renderUsuarios(){
       <p class="hint" style="text-align:left; margin-top:-6px; margin-bottom:12px;">
         Teste grátis ${new Date(p.trial_fim) > new Date() ? 'expira em ' : 'expirou em '}${new Date(p.trial_fim).toLocaleDateString('pt-BR')}
       </p>` : '';
+    const nomesPlano = { mensal: 'Mensal', trimestral: 'Trimestral', anual: 'Anual' };
+    const avisoPendente = p.aviso_pagamento_em && p.liberado !== true;
+    const avisoInfo = avisoPendente ? `
+      <div class="aviso-pagamento-banner">
+        💰 Avisou pagamento do plano <b>${escapeHtml(nomesPlano[p.aviso_pagamento_plano] || p.aviso_pagamento_plano || '—')}</b>
+        em ${new Date(p.aviso_pagamento_em).toLocaleString('pt-BR')} — confira o extrato Pix antes de liberar.
+      </div>` : '';
     return `
       <div class="usuario-row">
         <div class="top">
@@ -1679,6 +1793,7 @@ function renderUsuarios(){
           </div>
           <span class="status-pill ${pendente ? 'pendente' : 'liberado'}">${pendente ? 'Pendente' : 'Liberado'}</span>
         </div>
+        ${avisoInfo}
         ${trialInfo}
         <div class="field">
           <label>Nome</label>
@@ -1726,14 +1841,21 @@ async function salvarUsuario(id){
     return;
   }
 
+  // ao liberar o acesso, o aviso de pagamento já cumpriu o papel dele — some da lista de pendentes
+  const payload = { nome, cpf: cpf || null, tipo, plano, liberado };
+  if (liberado){
+    payload.aviso_pagamento_em = null;
+    payload.aviso_pagamento_plano = null;
+  }
+
   const { error } = await supabaseClient.from('profiles')
-    .update({ nome, cpf: cpf || null, tipo, plano, liberado }).eq('id', id);
+    .update(payload).eq('id', id);
 
   if (error){ showToast('Erro ao salvar usuário: ' + error.message); return; }
 
   showToast('Usuário atualizado.');
   if (id === currentUser?.id){
-    currentProfile = { ...currentProfile, nome, cpf, tipo, plano, liberado };
+    currentProfile = { ...currentProfile, ...payload };
     atualizarPlanoPill(currentProfile, tipo === 'C');
   }
   await loadUsuarios();
@@ -1824,10 +1946,13 @@ async function salvarAnotacoes(){
 /* ---------------- Tema ---------------- */
 function aplicarTema(tema){
   document.body.classList.toggle('tema-claro', tema === 'claro');
+  document.body.classList.toggle('tema-azul', tema === 'azul');
   const cardEscuro = document.getElementById('tema-opcao-escuro');
   const cardClaro = document.getElementById('tema-opcao-claro');
-  if (cardEscuro) cardEscuro.classList.toggle('selecionado', tema !== 'claro');
+  const cardAzul = document.getElementById('tema-opcao-azul');
+  if (cardEscuro) cardEscuro.classList.toggle('selecionado', tema !== 'claro' && tema !== 'azul');
   if (cardClaro) cardClaro.classList.toggle('selecionado', tema === 'claro');
+  if (cardAzul) cardAzul.classList.toggle('selecionado', tema === 'azul');
 }
 
 async function selecionarTema(tema){
@@ -2001,7 +2126,7 @@ async function onAuthReady(user){
     // conta ainda não liberada: mostra a tela de planos/pix (e a opção de teste grátis) em vez do app
     document.getElementById('app').classList.remove('active');
     document.getElementById('pending-screen').style.display = 'flex';
-    renderPlanos('pending-planos');
+    renderPlanos('pending-planos', { avisoBotao: true });
     renderTrialGratis();
     return;
   }
@@ -2028,8 +2153,8 @@ async function onAuthReady(user){
     document.getElementById('perfil-tipo-texto').textContent = 'Usuário (U)';
   }
 
-  // painel de Usuários e configuração de planos: só aparecem pro Criador
-  document.getElementById('tab-usuarios').style.display = isCreator ? 'flex' : 'none';
+  // painel de Usuários (agora dentro de Perfil) e configuração de planos: só aparecem pro Criador
+  document.getElementById('perfil-usuarios-card').style.display = isCreator ? 'block' : 'none';
   document.getElementById('config-planos-card').style.display = isCreator ? 'block' : 'none';
   document.getElementById('config-permissoes-card').style.display = isCreator ? 'block' : 'none';
 
@@ -2063,7 +2188,7 @@ function switchScreen(name){
   const mainEl = document.querySelector('main');
   if (mainEl) mainEl.scrollTop = 0;
 
-  if (name === 'usuarios'){
+  if (name === 'perfil' && currentProfile?.tipo === 'C'){
     loadUsuarios();
   }
 
