@@ -1065,7 +1065,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v68';
+const APP_VERSION = 'v69';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2157,6 +2157,10 @@ async function onAuthReady(user){
   document.getElementById('perfil-usuarios-card').style.display = isCreator ? 'block' : 'none';
   document.getElementById('config-planos-card').style.display = isCreator ? 'block' : 'none';
   document.getElementById('config-permissoes-card').style.display = isCreator ? 'block' : 'none';
+  // pré-visualização da tela de planos: só Criador. Reseta explicitamente porque, ao trocar de
+  // conta sem recarregar a página, o card ficava visível da sessão anterior do Criador.
+  document.getElementById('config-planos-preview-card').style.display = isCreator ? 'block' : 'none';
+  if (!isCreator) document.getElementById('config-planos-preview').innerHTML = '';
 
   if (isCreator){
     preencherFormConfiguracoes();
@@ -2626,11 +2630,17 @@ async function excluirCatalogoRack(id){
 // Resolve nome/foto/poder/bônus/slots/pode_vendido a partir do catálogo global — assim, se o
 // catálogo for editado ("Cadastro Miners"), os valores mostrados aqui mudam junto, sem precisar
 // duplicar/copiar esses dados pra cada usuário
+// Nome pra exibição: coloca o nível na frente do nome quando houver (ex: "ShaleRig" nível II -> "ShaleRig II")
+function nomeComNivel(item){
+  return (item.nome || '') + (item.nivel ? ' ' + item.nivel : '');
+}
+
 function resolverMeuMiner(m){
   const cat = catalogoMiners.find(c => c.id === m.catalogo_id) || {};
   return {
     ...m,
     nome: cat.nome || '(item removido do catálogo)',
+    nivel: cat.nivel || '',
     foto: cat.foto || null,
     poder: cat.poder ?? 0,
     unidade: cat.unidade || 'H/s',
@@ -2679,7 +2689,7 @@ function renderMiners(){
             <label>Minerador (do catálogo)</label>
             <div style="display:flex; align-items:center; gap:10px;">
               ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">⛏</div>`}
-              <div class="hint" style="margin:0; text-align:left;">${escapeHtml(m.nome)} · ${fmtNum(m.poder)} ${m.unidade} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados} slot(s)</div>
+              <div class="hint" style="margin:0; text-align:left;">${escapeHtml(nomeComNivel(m))} · ${fmtNum(m.poder)} ${m.unidade} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados} slot(s)</div>
             </div>
           </div>
           <div class="field" style="margin-bottom:0;">
@@ -2720,7 +2730,7 @@ function renderMiners(){
       <div class="miner-info">
         ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">⛏</div>`}
         <div class="miner-info-text">
-          <div class="name">${escapeHtml(m.nome)} ${tagsOff}</div>
+          <div class="name">${escapeHtml(nomeComNivel(m))} ${tagsOff}</div>
           <div class="stats">${m.pode_vendido ? 'PV' : 'NPV'} · Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus: ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s)${m.valor !== null && m.valor !== undefined ? ' · VP ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}${m.valor_mercado !== null && m.valor_mercado !== undefined ? ' · VM ' + fmtValorCompleto(m.valor_mercado) + ' ' + (m.moeda || 'RST') : ''}</div>
         </div>
       </div>
@@ -2881,6 +2891,7 @@ function resolverMeuRack(r){
   return {
     ...r,
     nome: cat.nome || '(item removido do catálogo)',
+    nivel: cat.nivel || '',
     foto: cat.foto || null,
     slots: cat.slots ?? 4,
     bonus: cat.bonus ?? 0,
@@ -2920,7 +2931,7 @@ function renderRacks(){
             <label>Rack (do catálogo)</label>
             <div style="display:flex; align-items:center; gap:10px;">
               ${r.foto ? `<img src="${r.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">▤</div>`}
-              <div class="hint" style="margin:0; text-align:left;">${escapeHtml(r.nome)} · ${r.slots} slots · Bônus ${fmtNum(r.bonus)}%</div>
+              <div class="hint" style="margin:0; text-align:left;">${escapeHtml(nomeComNivel(r))} · ${r.slots} slots · Bônus ${fmtNum(r.bonus)}%</div>
             </div>
           </div>
           <div class="field" style="margin-bottom:0;">
@@ -2954,7 +2965,7 @@ function renderRacks(){
       <div class="miner-info">
         ${r.foto ? `<img src="${r.foto}" alt="" class="miner-thumb">` : `<div class="miner-thumb-placeholder">▤</div>`}
         <div class="miner-info-text">
-          <div class="name">${escapeHtml(r.nome)} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots ?? 4} slots</span> ${tagOff}</div>
+          <div class="name">${escapeHtml(nomeComNivel(r))} <span class="coin-badge" style="width:auto; height:auto; padding:1px 7px; border-radius:100px; background:var(--surface-2); border:1px solid var(--border); color:var(--gold); font-size:10px;">${r.slots ?? 4} slots</span> ${tagOff}</div>
           <div class="stats">${r.slots ?? 4} slots · Bônus: ${fmtNum(r.bonus)}%${r.valor !== null && r.valor !== undefined ? ' · VP ' + fmtValorCompleto(r.valor) + ' ' + (r.moeda || 'RLT') : ''}${r.valor_mercado !== null && r.valor_mercado !== undefined ? ' · VM ' + fmtValorCompleto(r.valor_mercado) + ' ' + (r.moeda || 'RLT') : ''}</div>
         </div>
       </div>
