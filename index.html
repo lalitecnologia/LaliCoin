@@ -890,7 +890,10 @@
           prioridade e escolhem primeiro os melhores mineradores disponíveis (em caso de empate no bônus,
           o rack com mais slots vem primeiro); um minerador só pode ocupar um rack por vez, mesmo que haja
           outro minerador de mesmo nome disponível. Para cada rack, o cálculo soma o poder dos mineradores
-          escolhidos e aplica sobre esse total o bônus dos mineradores somado ao bônus do próprio rack. Se
+          escolhidos e aplica sobre esse total o bônus do próprio rack. O bônus dos mineradores não é aplicado
+          sobre o próprio minerador nem sobre o rack dele: os bônus de todos os mineradores da sala são
+          somados e aplicados sobre o poder total da sala (12 racks). Os mineradores são ordenados só pelo
+          poder (sem bônus). Se
           "Separar mineradores de mesmo nome em racks diferentes" estiver ativada na Configuração, dois
           mineradores de mesmo nome e nível nunca vão pro mesmo rack (ShaleRig II e ShaleRig III são
           diferentes, então podem ficar juntos).
@@ -1166,7 +1169,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v75';
+const APP_VERSION = 'v76';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1489,10 +1492,17 @@ function chaveRack(nome, slots){
   return chaveNome(nome) + '|' + (slots ?? '');
 }
 
-// Poder do miner já com o bônus individual aplicado — critério usado para ordenar
-// os miners do mais forte pro mais fraco em todo o app
+// Poder do miner (em H/s) — critério usado para ordenar os miners do mais forte pro mais fraco
+// na distribuição. O bônus do miner NÃO entra aqui: ele não é aplicado sobre o próprio miner, e sim
+// sobre o total do poder de todos os miners da sala (ver calcularMelhorRack).
 function scoreMiner(m){
-  return poderHsAtual(m) * (1 + Number(m.bonus) / 100);
+  return poderHsAtual(m);
+}
+
+// Ordena do maior poder pro menor; no empate de poder, o de maior bônus vem primeiro
+// (o bônus não altera o poder do miner, mas aumenta o total da sala)
+function compararMinersPorPoder(a, b){
+  return (scoreMiner(b) - scoreMiner(a)) || (Number(b.bonus) - Number(a.bonus));
 }
 
 // Formata um valor em H/s de volta para a unidade mais legível (uso genérico)
@@ -3900,8 +3910,8 @@ function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
 
   // O que maximiza o poder total combinado NÃO é a capacidade do rack, e sim o bônus dele:
-  // o bônus é um multiplicador aplicado sobre o poder de quem for colocado ali dentro, então
-  // o ganho absoluto é maior quando os melhores mineradores (maior poder+bônus) vão pro rack de
+  // o bônus do rack é um multiplicador aplicado sobre o poder de quem for colocado ali dentro, então
+  // o ganho absoluto é maior quando os melhores mineradores (maior poder) vão pro rack de
   // maior bônus — não importa se esse rack é pequeno ou grande. Prova rápida (efeito de troca):
   // dados dois racks com bônus b1 > b2, e dois grupos de mineradores com poder p1 > p2, colocar
   // p1 no rack de bônus b1 sempre resulta em soma total maior ou igual à alternativa, porque
@@ -3918,11 +3928,11 @@ function calcularMelhorRack(){
     return;
   }
 
-  // ordena TODOS os mineradores elegíveis, uma única vez, do maior poder+bônus pro menor —
+  // ordena TODOS os mineradores elegíveis, uma única vez, do maior poder pro menor (sem bônus) —
   // essa é a fila de prioridade usada em todos os racks, na ordem em que eles forem processados
   let poolMiners = myMiners
     .filter(m => m.usar_rack !== false && m.ativo !== false)
-    .sort((a, b) => scoreMiner(b) - scoreMiner(a));
+    .sort(compararMinersPorPoder);
 
   // opção do usuário (Configuração > Cálculo de distribuição), ativada por padrão
   const respeitarNomeUnico = currentProfile?.separar_mesmo_nome_racks !== false;
@@ -3945,13 +3955,28 @@ function calcularMelhorRack(){
     }
 
     const poderTotal = escolhidos.reduce((s, m) => s + poderHsAtual(m), 0);
-    const bonusMinersTotal = escolhidos.reduce((s, m) => s + Number(m.bonus), 0);
-    const bonusTotal = bonusMinersTotal + Number(rack.bonus);
-    const valorFinal = poderTotal * (1 + bonusTotal / 100);
+
+    // O bônus do miner NÃO é aplicado sobre este rack: aqui só somamos os bônus dos miners do rack,
+    // e a soma da sala inteira é aplicada depois sobre o poder total da sala. No jogo, miners de mesmo
+    // nome e nível no mesmo rack só contam um bônus (o poder soma normal) — só acontece com a opção
+    // "Separar mineradores de mesmo nome" desativada, já que ativada eles nunca ficam no mesmo rack.
+    const chavesContadas = new Set();
+    let bonusMiners = 0;
+    escolhidos.forEach(m => {
+      const chave = chaveMiner(m.nome, m.nivel);
+      if (chavesContadas.has(chave)) return;
+      chavesContadas.add(chave);
+      bonusMiners += Number(m.bonus) || 0;
+    });
+
+    // bônus do próprio rack: esse sim é aplicado sobre o poder dos miners deste rack
+    const bonusRack = Number(rack.bonus) || 0;
+    const ganhoRack = poderTotal * bonusRack / 100;
+    const poderRack = poderTotal + ganhoRack;
     const unidadeRef = unidadeReferencia(escolhidos);
     const slotsUsados = escolhidos.reduce((s, m) => s + (Number(m.slots_ocupados) || 1), 0);
 
-    const resultado = { combo: escolhidos, slots, poderTotal, bonusMinersTotal, bonusTotal, valorFinal, unidadeRef, slotsUsados };
+    const resultado = { combo: escolhidos, slots, poderTotal, bonusMiners, bonusRack, ganhoRack, poderRack, unidadeRef, slotsUsados };
 
     // remove do pool os mineradores já usados nesse rack, pro próximo rack (menor prioridade) não reaproveitar
     const idsEscolhidos = new Set(escolhidos.map(m => m.id));
@@ -3960,21 +3985,77 @@ function calcularMelhorRack(){
     resultadosPorRack.push({ rack, resultado });
   }
 
-  // soma o poder de todos os racks que tiveram resultado (ignora os "insuficiente"/"semCombinacao")
-  const poderTotalGeral = resultadosPorRack.reduce((s, item) => s + (item.resultado ? item.resultado.poderTotal : 0), 0);
+  const RACKS_POR_SALA = 12;
+
+  // agrupa os racks em salas de 12 (os primeiros 12 por prioridade vão pra Sala 1, os próximos 12 pra
+  // Sala 2, e assim por diante). O bônus dos miners é somado por sala e aplicado sobre o poder total
+  // da sala (soma do poder de todos os miners), não sobre cada miner nem sobre cada rack.
+  // Valor final da sala = poder base x (1 + soma dos bônus dos miners) + ganho dos bônus dos racks
+  const salas = [];
+  resultadosPorRack.forEach((item, i) => {
+    const idx = Math.floor(i / RACKS_POR_SALA);
+    if (!salas[idx]) salas[idx] = { numero: idx + 1, poderBase: 0, bonusMiners: 0, ganhoRacks: 0, racks: 0, combo: [] };
+    if (!item.resultado) return;
+    const sala = salas[idx];
+    sala.poderBase += item.resultado.poderTotal;
+    sala.bonusMiners += item.resultado.bonusMiners;
+    sala.ganhoRacks += item.resultado.ganhoRack;
+    sala.racks++;
+    sala.combo.push(...item.resultado.combo);
+  });
+  salas.forEach(sala => {
+    sala.valorFinal = sala.poderBase * (1 + sala.bonusMiners / 100) + sala.ganhoRacks;
+    sala.unidadeRef = sala.combo.length ? unidadeReferencia(sala.combo) : 'H/s';
+  });
+
+  // soma de todos os racks que tiveram resultado (ignora os "insuficiente"/"semCombinacao")
+  const poderTotalGeral = salas.reduce((s, sala) => s + sala.poderBase, 0);
+  const valorFinalGeral = salas.reduce((s, sala) => s + sala.valorFinal, 0);
   const racksComResultado = resultadosPorRack.filter(item => item.resultado).length;
 
   const resumoGeral = `
     <div class="card" style="border-color:var(--gold-dim); background:rgba(232,185,62,0.05);">
       <div class="section-title">Soma geral (todos os racks)</div>
-      <div class="result-summary">
+      <div class="result-summary" style="flex-wrap:wrap; gap:14px;">
         <div class="metric">
           <div class="val">${formatarPoder(poderTotalGeral)}</div>
           <div class="lbl">Poder total combinado</div>
         </div>
         <div class="metric">
+          <div class="val">${formatarPoder(valorFinalGeral)}</div>
+          <div class="lbl">Valor final (com bônus)</div>
+        </div>
+        <div class="metric">
           <div class="val">${racksComResultado}</div>
           <div class="lbl">Rack(s) preenchido(s)</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // cartão de total de cada sala, exibido antes dos racks daquela sala
+  const cardSala = (sala) => `
+    <div class="card" style="border-color:var(--gold-dim);">
+      <div class="section-title">Sala ${sala.numero} — total da sala</div>
+      <p class="hint" style="margin:0 0 10px; text-align:left;">
+        O bônus dos mineradores é somado e aplicado sobre o poder total de todos os mineradores da sala.
+      </p>
+      <div class="result-summary" style="flex-wrap:wrap; gap:14px;">
+        <div class="metric">
+          <div class="val">${formatarPoderDesde(sala.poderBase, sala.unidadeRef)}</div>
+          <div class="lbl">Poder total dos miners</div>
+        </div>
+        <div class="metric">
+          <div class="val">${sala.bonusMiners.toFixed(2)}%</div>
+          <div class="lbl">Bônus dos miners (soma)</div>
+        </div>
+        <div class="metric">
+          <div class="val">${formatarPoderDesde(sala.ganhoRacks, sala.unidadeRef)}</div>
+          <div class="lbl">Ganho dos bônus dos racks</div>
+        </div>
+        <div class="metric">
+          <div class="val">${formatarPoderDesde(sala.valorFinal, sala.unidadeRef)}</div>
+          <div class="lbl">Valor final da sala</div>
         </div>
       </div>
     </div>
@@ -3996,16 +4077,15 @@ function calcularMelhorRack(){
     ? ` · ${fmtValorCompleto(rack.valor)} ${rack.moeda || 'RLT'}`
     : '';
 
-  const RACKS_POR_SALA = 12;
-
   box.innerHTML = resumoGeral + resumoPrioridade + resultadosPorRack.map((item, indiceRack) => {
     // distribui os racks em salas de 12: os primeiros 12 (por prioridade) vão pra Sala 1,
     // os próximos 12 pra Sala 2, e assim por diante
     const numeroSala = Math.floor(indiceRack / RACKS_POR_SALA) + 1;
     const rackNaSala = (indiceRack % RACKS_POR_SALA) + 1;
     const prefixoSala = `Sala ${numeroSala} / Rack ${rackNaSala} - `;
+    const cabecalhoSala = rackNaSala === 1 ? cardSala(salas[numeroSala - 1]) : '';
     if (item.insuficiente){
-      return `
+      return cabecalhoSala + `
         <div class="card">
           <div class="cb-group-title" style="margin-top:0;">${prefixoSala}${escapeHtml(nomeComNivel(item.rack))} ${item.rack.slots || 4} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
           <div class="empty-state">Não há mineradores suficientes disponíveis para este rack (já usados nos racks de maior prioridade).</div>
@@ -4013,7 +4093,7 @@ function calcularMelhorRack(){
       `;
     }
     if (item.semCombinacao){
-      return `
+      return cabecalhoSala + `
         <div class="card">
           <div class="cb-group-title" style="margin-top:0;">${prefixoSala}${escapeHtml(nomeComNivel(item.rack))} ${item.rack.slots || 4} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
           <div class="empty-state">Nenhum minerador coube nesse rack (nomes repetidos ou slots incompatíveis).</div>
@@ -4042,8 +4122,6 @@ function calcularMelhorRack(){
       }
     }
 
-    const poderComBonus = (m) => formatarPoder(scoreMiner(m));
-
     const celulaMiner = (m, numSlot) => `
       <div class="slot-cell">
         <div class="num">SLOT ${numSlot}</div>
@@ -4053,13 +4131,12 @@ function calcularMelhorRack(){
         </div>
         <div class="stat">Poder <b>${fmtNum(m.poder)} ${m.unidade || 'H/s'}</b></div>
         <div class="stat">Bônus <b>${fmtNum(m.bonus)}%</b></div>
-        <div class="stat">Poder + bônus <b>${poderComBonus(m)}</b></div>
         <div class="stat">${m.pode_vendido ? 'PV' : 'NPV'}</div>
       </div>`;
     const celulaVazia = (numSlot) => `
       <div class="slot-cell vazio">SLOT ${numSlot} · vazio</div>`;
 
-    return `
+    return cabecalhoSala + `
       <div class="card">
         <div class="cb-group-title" style="margin-top:0;">${prefixoSala}${escapeHtml(nomeComNivel(item.rack))} ${capacidade} ${fmtNum(item.rack.bonus)}%${valorRackTexto(item.rack)}</div>
         <div class="estante">
@@ -4075,14 +4152,13 @@ function calcularMelhorRack(){
                   </div>
                   <div class="stat">Poder <b>${fmtNum(p.a.poder)} ${p.a.unidade || 'H/s'}</b></div>
                   <div class="stat">Bônus <b>${fmtNum(p.a.bonus)}%</b></div>
-                  <div class="stat">Poder + bônus <b>${poderComBonus(p.a)}</b></div>
                   <div class="stat">${p.a.pode_vendido ? 'PV' : 'NPV'}</div>
                 </div>
               ` : p.tipo === 'dupla' ? `
                 ${celulaMiner(p.a, p.inicio)}
                 ${celulaMiner(p.b, p.fim)}
                 <div class="stat" style="grid-column:1 / -1; text-align:center; padding-top:4px; border-top:1px dashed var(--border); margin-top:2px;">
-                  Soma da prateleira (poder + bônus de cada um) <b>${formatarPoder(scoreMiner(p.a) + scoreMiner(p.b))}</b>
+                  Soma da prateleira (poder) <b>${formatarPoder(scoreMiner(p.a) + scoreMiner(p.b))}</b>
                 </div>
               ` : p.tipo === 'parcial' ? `
                 ${celulaMiner(p.a, p.inicio)}
@@ -4100,12 +4176,12 @@ function calcularMelhorRack(){
             <div class="lbl">Poder total</div>
           </div>
           <div class="metric">
-            <div class="val">${r.bonusTotal.toFixed(2)}%</div>
-            <div class="lbl">Bônus total (miners + rack)</div>
+            <div class="val">${r.bonusMiners.toFixed(2)}%</div>
+            <div class="lbl">Bônus dos miners (vai pra sala)</div>
           </div>
           <div class="metric">
-            <div class="val">${formatarPoderDesde(r.valorFinal, r.unidadeRef)}</div>
-            <div class="lbl">Valor final</div>
+            <div class="val">${formatarPoderDesde(r.poderRack, r.unidadeRef)}</div>
+            <div class="lbl">Poder c/ bônus do rack (${fmtNum(r.bonusRack)}%)</div>
           </div>
         </div>
       </div>
@@ -4117,14 +4193,14 @@ function calcularMelhorRack(){
 function renderMinersSobrando(poolMiners){
   if (!poolMiners.length) return '';
 
-  const ordenados = [...poolMiners].sort((a, b) => scoreMiner(b) - scoreMiner(a));
+  const ordenados = [...poolMiners].sort(compararMinersPorPoder);
 
   return `
     <div class="card">
       <div class="cb-group-title" style="margin-top:0;">Sem rack disponível <span class="tag-off">${ordenados.length} minerador(es)</span></div>
       <p class="hint" style="margin-bottom:10px; text-align:left;">
         Estes mineradores ficaram de fora porque não sobrou slot em nenhum rack ativo. Aparecem do
-        maior pro menor poder (com bônus aplicado) — os últimos da lista são os que menos fariam
+        maior pro menor poder (o bônus não entra na ordenação) — os últimos da lista são os que menos fariam
         diferença se você precisar liberar espaço ou comprar mais um rack.
       </p>
       ${ordenados.map((m, i) => `
@@ -4137,7 +4213,7 @@ function renderMinersSobrando(poolMiners){
           ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb" style="width:100px; height:50px; flex-shrink:0;">` : ''}
           <div class="cb-score">
             <div class="val">${formatarPoder(scoreMiner(m))}</div>
-            <div class="lbl">poder + bônus</div>
+            <div class="lbl">poder</div>
           </div>
         </div>
       `).join('')}
