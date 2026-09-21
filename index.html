@@ -892,7 +892,8 @@
           outro minerador de mesmo nome disponível. Para cada rack, o cálculo soma o poder dos mineradores
           escolhidos e aplica sobre esse total o bônus dos mineradores somado ao bônus do próprio rack. Se
           "Separar mineradores de mesmo nome em racks diferentes" estiver ativada na Configuração, dois
-          mineradores de mesmo nome nunca vão pro mesmo rack.
+          mineradores de mesmo nome e nível nunca vão pro mesmo rack (ShaleRig II e ShaleRig III são
+          diferentes, então podem ficar juntos).
         </p>
       </div>
 
@@ -1031,9 +1032,10 @@
       <div class="card">
         <div class="section-title">Cálculo de distribuição</div>
         <p class="hint" style="margin-bottom:14px; text-align:left;">
-          No jogo, dois mineradores de mesmo nome no mesmo rack não somam os dois bônus (só um deles
-          conta, o poder soma normal). Com esta opção ativada, o cálculo nunca coloca dois mineradores
-          de mesmo nome no mesmo rack — se houver mais de um disponível, eles são espalhados em racks
+          No jogo, dois mineradores de mesmo nome e nível no mesmo rack não somam os dois bônus (só um
+          deles conta, o poder soma normal). Com esta opção ativada, o cálculo nunca coloca dois
+          mineradores de mesmo nome e nível no mesmo rack (ShaleRig II e ShaleRig III contam como
+          diferentes) — se houver mais de um disponível, eles são espalhados em racks
           diferentes pra cada bônus contar. Fica ativada por padrão em cadastros novos.
         </p>
         <div class="field">
@@ -1164,7 +1166,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v76';
+const APP_VERSION = 'v75';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2397,8 +2399,7 @@ async function selecionarTema(tema){
   if (!currentUser) return;
   const { error } = await supabaseClient.from('profiles').update({ tema }).eq('id', currentUser.id);
   if (error){
-    console.error('Erro ao salvar o tema:', error);
-    showToast('Não foi possível salvar o tema (' + error.message + '). Ele continua aplicado agora.');
+    showToast('Não foi possível salvar o tema, mas ele continua aplicado agora.');
     return;
   }
   currentProfile = { ...currentProfile, tema };
@@ -3808,8 +3809,9 @@ function combinacoes(arr, k){
 // de maior valor combinado é preenchida primeiro, e assim por diante até a capacidade do rack.
 // Agrupa os mineradores de 1 slot em pares pra dividir prateleira, sempre tentando juntar os
 // dois melhores disponíveis — mas, quando respeitarNomeUnico está ativo, nunca junta dois do
-// mesmo nome na mesma prateleira (no jogo isso faz um dos dois bônus não contar). Quando o
-// próximo da fila tem o mesmo nome do parceiro escolhido, pula pro próximo nome diferente.
+// mesmo nome E nível na mesma prateleira (no jogo isso faz um dos dois bônus não contar; já
+// ShaleRig II e ShaleRig III são miners diferentes e podem ficar juntos). Quando o próximo da
+// fila é igual ao parceiro escolhido, pula pro próximo miner diferente.
 function parearSimples(lista, respeitarNomeUnico){
   const restantes = [...lista];
   const pares = [];
@@ -3820,9 +3822,9 @@ function parearSimples(lista, respeitarNomeUnico){
       pares.push(b ? { valor: scoreMiner(a) + scoreMiner(b), miners: [a, b] } : { valor: scoreMiner(a), miners: [a] });
       continue;
     }
-    const idxParceiro = restantes.findIndex(m => (m.nome || '') !== (a.nome || ''));
+    const idxParceiro = restantes.findIndex(m => chaveMiner(m.nome, m.nivel) !== chaveMiner(a.nome, a.nivel));
     if (idxParceiro === -1){
-      pares.push({ valor: scoreMiner(a), miners: [a] }); // só sobraram do mesmo nome: fica sozinho
+      pares.push({ valor: scoreMiner(a), miners: [a] }); // só sobraram iguais (mesmo nome e nível): fica sozinho
       continue;
     }
     const b = restantes.splice(idxParceiro, 1)[0];
@@ -3839,7 +3841,7 @@ function parearSimples(lista, respeitarNomeUnico){
 // de maior valor combinado é preenchida primeiro, e assim por diante até a capacidade do rack.
 //
 // respeitarNomeUnico (opção do usuário, ativada por padrão): quando true, dois mineradores de
-// mesmo nome nunca vão pro mesmo rack — se aparecer um conflito, a opção é pulada (o minerador
+// mesmo nome E nível nunca vão pro mesmo rack — se aparecer um conflito, a opção é pulada (o minerador
 // fica disponível pro próximo rack, de menor prioridade) e o cálculo tenta a próxima melhor
 // opção de prateleira que não repita nome já usado neste rack.
 function montarRackGreedy(minersDisponiveis, capacidade, respeitarNomeUnico){
@@ -3861,12 +3863,12 @@ function montarRackGreedy(minersDisponiveis, capacidade, respeitarNomeUnico){
   // ordena as opções de prateleira pelo valor combinado, maior pra menor
   opcoes.sort((x, y) => y.valor - x.valor);
 
-  const nomesUsados = new Set();
+  const nomesUsados = new Set(); // chaves nome+nível já usadas neste rack
   let prateleiraAtual = 0;
   for (const op of opcoes){
     if (prateleiraAtual >= numPrateleiras) break;
 
-    if (respeitarNomeUnico && op.miners.some(m => nomesUsados.has(m.nome))){
+    if (respeitarNomeUnico && op.miners.some(m => nomesUsados.has(chaveMiner(m.nome, m.nivel)))){
       continue; // conflito de nome com algo já colocado neste rack — deixa pro próximo rack
     }
 
@@ -3887,7 +3889,7 @@ function montarRackGreedy(minersDisponiveis, capacidade, respeitarNomeUnico){
     }
 
     escolhidos.push(...op.miners);
-    op.miners.forEach(m => nomesUsados.add(m.nome));
+    op.miners.forEach(m => nomesUsados.add(chaveMiner(m.nome, m.nivel)));
     prateleiraAtual++;
   }
 
