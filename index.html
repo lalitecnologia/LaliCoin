@@ -793,7 +793,10 @@
       </div>
 
       <div class="card">
-        <div class="section-title">Meus miners <span id="contador-miners" class="counter-badge">0</span></div>
+        <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <span>Meus miners <span id="contador-miners" class="counter-badge">0</span></span>
+          <button type="button" class="btn btn-ghost" style="width:auto; padding:6px 14px; font-size:12px;" onclick="exportarMinersTxt()">Exportar .txt</button>
+        </div>
         <div id="miners-list"><div class="empty-state">Nenhum minerador vinculado ainda.</div></div>
       </div>
     </section>
@@ -855,7 +858,10 @@
       </div>
 
       <div class="card">
-        <div class="section-title">Meus racks <span id="contador-racks" class="counter-badge">0</span></div>
+        <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <span>Meus racks <span id="contador-racks" class="counter-badge">0</span></span>
+          <button type="button" class="btn btn-ghost" style="width:auto; padding:6px 14px; font-size:12px;" onclick="exportarRacksTxt()">Exportar .txt</button>
+        </div>
         <div id="racks-list"><div class="empty-state">Nenhum rack vinculado ainda.</div></div>
       </div>
     </section>
@@ -1175,7 +1181,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v78';
+const APP_VERSION = 'v79';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4378,6 +4384,91 @@ function renderMinersSobrando(poolMiners){
       `).join('')}
     </div>
   `;
+}
+
+/* ---------------- Exportação em .txt (pra conferência externa) ---------------- */
+
+function baixarTxt(nomeArquivo, conteudo){
+  const blob = new Blob([conteudo], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function carimboDataHora(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Exporta os miners vinculados (aba Miners) num .txt simples de ler e colar em qualquer lugar.
+// Traz poder já convertido pra H/s junto do valor original, pra facilitar conferência de contas.
+function exportarMinersTxt(){
+  if (!myMiners.length){
+    showToast('Nenhum minerador cadastrado ainda.');
+    return;
+  }
+
+  const ordenados = [...myMiners].sort(compararMinersPorPoder);
+  const linhas = [];
+  linhas.push(`=== MEUS MINERS — LaliCoin ${APP_VERSION} — exportado em ${carimboDataHora()} ===`);
+  linhas.push(`Total: ${ordenados.length} miner(es)`);
+  linhas.push('');
+
+  ordenados.forEach((m, i) => {
+    linhas.push(`${i + 1}. ${nomeComNivel(m)}`);
+    linhas.push(`   Poder: ${fmtNum(m.poder)} ${m.unidade || 'H/s'} (= ${poderHsAtual(m)} H/s)`);
+    linhas.push(`   Bônus: ${fmtNum(m.bonus)}%`);
+    linhas.push(`   Slots ocupados: ${m.slots_ocupados ?? 1}`);
+    linhas.push(`   Ativo: ${m.ativo !== false ? 'sim' : 'não'}`);
+    linhas.push(`   Usar no cálculo do rack: ${m.usar_rack !== false ? 'sim' : 'não'}`);
+    linhas.push(`   Usar no custo-benefício: ${m.usar_cb !== false ? 'sim' : 'não'}`);
+    linhas.push(`   Pode ser vendido: ${m.pode_vendido ? 'sim' : 'não'}`);
+    if (m.valor !== undefined && m.valor !== null) linhas.push(`   Valor pago: ${fmtValorCompleto(m.valor)} ${m.moeda || 'RLT'}`);
+    if (m.valor_mercado !== undefined && m.valor_mercado !== null) linhas.push(`   Valor de mercado: ${fmtValorCompleto(m.valor_mercado)} ${m.moeda || 'RLT'}`);
+    linhas.push('');
+  });
+
+  baixarTxt(`lalicoin-miners-${APP_VERSION}.txt`, linhas.join('\n'));
+}
+
+// Exporta os racks vinculados (aba Rack) num .txt simples de ler e colar em qualquer lugar.
+function exportarRacksTxt(){
+  if (!myRacks.length){
+    showToast('Nenhum rack cadastrado ainda.');
+    return;
+  }
+
+  const ordenados = [...myRacks].sort((a, b) => {
+    const bonusDiff = Number(b.bonus) - Number(a.bonus);
+    if (bonusDiff !== 0) return bonusDiff;
+    return (Number(b.slots) || 4) - (Number(a.slots) || 4);
+  });
+  const respeitarNomeUnico = currentProfile?.separar_mesmo_nome_racks !== false;
+
+  const linhas = [];
+  linhas.push(`=== MEUS RACKS — LaliCoin ${APP_VERSION} — exportado em ${carimboDataHora()} ===`);
+  linhas.push(`Total: ${ordenados.length} rack(s)`);
+  linhas.push(`Configuração "Separar mineradores de mesmo nome em racks diferentes": ${respeitarNomeUnico ? 'ativada' : 'desativada'}`);
+  linhas.push('');
+
+  ordenados.forEach((r, i) => {
+    linhas.push(`${i + 1}. ${nomeComNivel(r)}`);
+    linhas.push(`   Slots: ${r.slots || 4}`);
+    linhas.push(`   Bônus: ${fmtNum(r.bonus)}%`);
+    linhas.push(`   Ativo: ${r.ativo !== false ? 'sim' : 'não'}`);
+    linhas.push(`   Pode ser vendido: ${r.pode_vendido ? 'sim' : 'não'}`);
+    if (r.valor !== undefined && r.valor !== null) linhas.push(`   Valor pago: ${fmtValorCompleto(r.valor)} ${r.moeda || 'RLT'}`);
+    if (r.valor_mercado !== undefined && r.valor_mercado !== null) linhas.push(`   Valor de mercado: ${fmtValorCompleto(r.valor_mercado)} ${r.moeda || 'RLT'}`);
+    linhas.push('');
+  });
+
+  baixarTxt(`lalicoin-racks-${APP_VERSION}.txt`, linhas.join('\n'));
 }
 
 /* ---------------- Custo-benefício ---------------- */
