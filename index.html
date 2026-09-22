@@ -885,18 +885,24 @@
       <div class="card">
         <div class="section-title">Melhor combinação por rack</div>
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
-          Distribui seus mineradores ativos entre os racks ativos, respeitando a quantidade de slots de
-          cada rack e quantos slots cada minerador ocupa (1, 2 ou mais). Racks com maior bônus têm
-          prioridade e escolhem primeiro os melhores mineradores disponíveis (em caso de empate no bônus,
-          o rack com mais slots vem primeiro); um minerador só pode ocupar um rack por vez, mesmo que haja
-          outro minerador de mesmo nome disponível. Para cada rack, o cálculo soma o poder dos mineradores
-          escolhidos e aplica sobre esse total o bônus do próprio rack. O bônus dos mineradores não é aplicado
-          sobre o próprio minerador nem sobre o rack dele: os bônus de todos os mineradores da sala são
-          somados e aplicados sobre o poder total da sala (12 racks). Os mineradores são ordenados só pelo
-          poder (sem bônus). Se
-          "Separar mineradores de mesmo nome em racks diferentes" estiver ativada na Configuração, dois
-          mineradores de mesmo nome e nível nunca vão pro mesmo rack (ShaleRig II e ShaleRig III são
-          diferentes, então podem ficar juntos).
+          Total Power = (Poder dos miners + Games) × (1 + Collection Bonus) + Rack Bonus + Temporary.
+          Este app ainda não cadastra Games nem Temporary, então essas parcelas entram como 0. O
+          Collection Bonus soma o bônus de cada TIPO de minerador (nome+nível) presente na sala (até 12
+          racks), contado uma única vez por tipo — não importa quantas cópias nem em quantos racks
+          diferentes elas estejam — e é aplicado sobre o poder de todos os mineradores da sala. Um
+          minerador fraco de um tipo novo pode valer mais que um forte de um tipo repetido, porque ele
+          eleva o multiplicador aplicado ao resto da sala inteira. Por isso o cálculo não usa uma fila
+          fixa por poder: ele testa combinações de quais tipos entram na sala e escolhe a de maior Total
+          Power (busca exaustiva até 14 tipos distintos por sala; acima disso, uma busca aproximada por
+          ganho marginal, sinalizada no resultado). Dentro de cada combinação testada, os mineradores
+          escolhidos vão para o rack de maior bônus primeiro, do maior pro menor poder — isso já é a
+          distribuição ótima para os tipos daquela combinação. Salas com racks de maior bônus têm
+          prioridade e escolhem primeiro os mineradores disponíveis; um minerador só pode ocupar um rack
+          por vez, mesmo que haja outro de mesmo nome disponível. Se "Separar mineradores de mesmo nome em
+          racks diferentes" estiver ativada na Configuração, dois mineradores de mesmo nome e nível nunca
+          vão pro mesmo rack (ShaleRig II e ShaleRig III são diferentes, então podem ficar juntos); se
+          estiver desativada, dois do mesmo tipo no mesmo rack só contam um bônus de Collection Bonus (a
+          soma do poder continua normal).
         </p>
       </div>
 
@@ -1169,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v76';
+const APP_VERSION = 'v77';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3906,18 +3912,181 @@ function montarRackGreedy(minersDisponiveis, capacidade, respeitarNomeUnico){
   return { slots, escolhidos };
 }
 
+/* ---------------- Otimização por combinação de tipos (Collection Bonus) ----------------
+   Total Power = (Poder dos miners + Games) x (1 + Collection Bonus) + Rack Bonus + Temporary.
+   Este app ainda não cadastra Games (poder de jogos) nem Temporary (boosts temporários), então
+   essas duas parcelas entram como 0 na fórmula abaixo — se algum dia forem cadastrados, é só somar
+   aqui. O Collection Bonus soma o bônus de cada TIPO (nome+nível) presente na SALA (12 racks),
+   contado uma única vez por tipo (não importa quantas cópias, nem em quantos racks diferentes elas
+   estejam), e é aplicado sobre o poder de TODOS os miners da sala — por isso um miner fraco mas de
+   tipo novo pode valer mais que um miner forte de um tipo repetido: ele levanta o multiplicador
+   aplicado no resto da sala inteira. Por isso não dá pra só ordenar os miners por poder e distribuir
+   greedy: o algoritmo testa combinações de QUAIS TIPOS entram na sala e compara o Total Power
+   resultante de cada uma. */
+const GAMES_POWER = 0;   // não cadastrado no app ainda
+const TEMPORARY_BOOST = 0; // não cadastrado no app ainda
+
+// Preenche os racks de uma sala com um pool já ordenado (maior poder primeiro), usando o mesmo
+// empacotamento por prateleira de montarRackGreedy, um rack de cada vez, consumindo o pool.
+function preencherRacksComPool(poolOrdenado, racksOrdenados, respeitarNomeUnico){
+  let pool = poolOrdenado;
+  let poderBase = 0;
+  let ganhoRacks = 0;
+  const porRack = [];
+
+  for (const rack of racksOrdenados){
+    const capacidade = rack.slots || 4;
+
+    if (!pool.length){
+      porRack.push({ rack, insuficiente: true });
+      continue;
+    }
+
+    const { slots, escolhidos } = montarRackGreedy(pool, capacidade, respeitarNomeUnico);
+
+    if (!escolhidos.length){
+      porRack.push({ rack, semCombinacao: true });
+      continue;
+    }
+
+    const poderTotal = escolhidos.reduce((s, m) => s + poderHsAtual(m), 0);
+    const bonusRack = Number(rack.bonus) || 0;
+    const ganhoRack = poderTotal * bonusRack / 100;
+    const poderRack = poderTotal + ganhoRack;
+    const unidadeRef = unidadeReferencia(escolhidos);
+    const slotsUsados = escolhidos.reduce((s, m) => s + (Number(m.slots_ocupados) || 1), 0);
+
+    poderBase += poderTotal;
+    ganhoRacks += ganhoRack;
+
+    const idsEscolhidos = new Set(escolhidos.map(m => m.id));
+    pool = pool.filter(m => !idsEscolhidos.has(m.id));
+
+    porRack.push({ rack, resultado: { combo: escolhidos, slots, poderTotal, bonusRack, ganhoRack, poderRack, unidadeRef, slotsUsados } });
+  }
+
+  return { porRack, poderBase, ganhoRacks, poolRestante: pool };
+}
+
+// Agrupa os miners disponíveis por nome+nível — cada grupo é um "tipo" pro Collection Bonus.
+function agruparPorTipo(pool){
+  const mapa = new Map();
+  pool.forEach(m => {
+    const chave = chaveMiner(m.nome, m.nivel);
+    if (!mapa.has(chave)) mapa.set(chave, { chave, nome: m.nome, nivel: m.nivel, bonus: Number(m.bonus) || 0, membros: [] });
+    mapa.get(chave).membros.push(m);
+  });
+  return [...mapa.values()];
+}
+
+// Avalia uma combinação específica de tipos ativos (mascara de bits, um bit por grupo) pra uma sala:
+// monta o pool candidato só com os membros dos tipos escolhidos, preenche os racks (dado o Collection
+// Bonus fixado pela escolha dos tipos, empacotar por maior poder primeiro é ótimo — ver nota abaixo)
+// e recalcula o Collection Bonus com base nos tipos que REALMENTE couberam na sala, já que a
+// capacidade pode não dar pra encaixar um representante de todo tipo testado.
+//
+// Por que ordenar só por poder é ótimo aqui, com o Collection Bonus já fixo: o Total Power fica
+// linear em cada miner — poder_m x [(1 + colBonus/100) + bonusRack_do_rack/100] — então, pela
+// desigualdade do rearranjo, a melhor alocação é sempre colocar quem tem mais poder no rack de maior
+// bônus. Não é preciso testar outras ordens de rack pra uma combinação de tipos já fixada.
+function avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascara, racksOrdenados, respeitarNomeUnico){
+  const poolCandidatos = [];
+  grupos.forEach((g, i) => {
+    if (mascara & (1 << i)) poolCandidatos.push(...g.membros);
+  });
+  poolCandidatos.sort(compararMinersPorPoder);
+
+  const { porRack, poderBase, ganhoRacks, poolRestante } = preencherRacksComPool(poolCandidatos, racksOrdenados, respeitarNomeUnico);
+
+  const comboFinal = porRack.filter(r => r.resultado).flatMap(r => r.resultado.combo);
+  const tiposPresentes = new Set(comboFinal.map(m => chaveMiner(m.nome, m.nivel)));
+  let colBonus = 0;
+  tiposPresentes.forEach(chave => { colBonus += mapaBonusPorTipo.get(chave) || 0; });
+
+  const valorFinal = (poderBase + GAMES_POWER) * (1 + colBonus / 100) + ganhoRacks + TEMPORARY_BOOST;
+
+  return { mascara, colBonus, poderBase, ganhoRacks, valorFinal, porRack, poolRestante };
+}
+
+const LIMITE_TIPOS_EXATO = 14; // 2^14 = 16384 combinações — busca exaustiva ainda rápida
+
+// Encontra a melhor distribuição pra UMA sala (até 12 racks), considerando todo o pool de miners
+// ainda disponível (não usado pelas salas de maior prioridade). Testa combinações de quais TIPOS
+// entram na sala, não só quais miners individuais.
+function otimizarSala(poolDisponivel, racksDaSala, respeitarNomeUnico){
+  const grupos = agruparPorTipo(poolDisponivel);
+  const mapaBonusPorTipo = new Map(grupos.map(g => [g.chave, g.bonus]));
+  const racksOrdenados = [...racksDaSala].sort((a, b) => {
+    const bonusDiff = Number(b.bonus) - Number(a.bonus);
+    if (bonusDiff !== 0) return bonusDiff;
+    return (Number(b.slots) || 4) - (Number(a.slots) || 4);
+  });
+
+  if (!grupos.length){
+    return { ...avaliarCombinacaoTipos([], mapaBonusPorTipo, 0, racksOrdenados, respeitarNomeUnico), aproximado: false };
+  }
+
+  if (grupos.length <= LIMITE_TIPOS_EXATO){
+    // Testa TODAS as combinações de tipos (do "nenhum tipo" até "todos os tipos") e fica com a de
+    // maior Total Power — busca exaustiva, nenhuma combinação possível de tipos fica de fora.
+    let melhor = null;
+    const totalCombos = 1 << grupos.length;
+    for (let mascara = 0; mascara < totalCombos; mascara++){
+      const resultado = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascara, racksOrdenados, respeitarNomeUnico);
+      if (!melhor || resultado.valorFinal > melhor.valorFinal) melhor = resultado;
+    }
+    return { ...melhor, aproximado: false };
+  }
+
+  // Catálogo grande demais pra busca exaustiva (mais tipos distintos que LIMITE_TIPOS_EXATO) —
+  // construção gulosa por ganho marginal: começa sem nenhum tipo e, a cada passo, adiciona o tipo
+  // que mais aumenta o Total Power, até que nenhum tipo restante melhore o resultado. Continua
+  // testando o ganho real da combinação (não poder nem bônus isolados), só não é garantidamente o
+  // ótimo global. TODO: trocar por uma busca mais forte (branch and bound) se isso incomodar.
+  let mascaraAtual = 0;
+  let melhor = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, 0, racksOrdenados, respeitarNomeUnico);
+  let melhorou = true;
+  while (melhorou){
+    melhorou = false;
+    let melhorPasso = null;
+    for (let i = 0; i < grupos.length; i++){
+      if (mascaraAtual & (1 << i)) continue;
+      const candidato = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascaraAtual | (1 << i), racksOrdenados, respeitarNomeUnico);
+      if (candidato.valorFinal > melhor.valorFinal && (!melhorPasso || candidato.valorFinal > melhorPasso.valorFinal)){
+        melhorPasso = candidato;
+      }
+    }
+    if (melhorPasso){
+      melhor = melhorPasso;
+      mascaraAtual = melhorPasso.mascara;
+      melhorou = true;
+    }
+  }
+  return { ...melhor, aproximado: true };
+}
+
+// Roda o método antigo (fila única por poder, sem testar combinações de tipo) na mesma sala e pool,
+// só pra servir de comparação ("diferença em relação à configuração atual") — o app não guarda onde
+// cada miner está fisicamente encaixado hoje no RollerCoin, então a base de comparação é essa.
+function calcularSalaMetodoAntigo(poolDisponivel, racksOrdenados, respeitarNomeUnico){
+  const poolOrdenado = [...poolDisponivel].sort(compararMinersPorPoder);
+  const { porRack, poderBase, ganhoRacks } = preencherRacksComPool(poolOrdenado, racksOrdenados, respeitarNomeUnico);
+  const comboFinal = porRack.filter(r => r.resultado).flatMap(r => r.resultado.combo);
+  const colBonus = agruparPorTipo(comboFinal).reduce((s, g) => s + g.bonus, 0);
+  const valorFinal = (poderBase + GAMES_POWER) * (1 + colBonus / 100) + ganhoRacks + TEMPORARY_BOOST;
+  return valorFinal;
+}
+
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
+  box.innerHTML = `<div class="card"><div class="empty-state">Calculando as combinações de distribuição…</div></div>`;
+  // dá um respiro pro navegador pintar a mensagem acima antes de travar a thread com a busca
+  setTimeout(executarCalculoMelhorRack, 20);
+}
 
-  // O que maximiza o poder total combinado NÃO é a capacidade do rack, e sim o bônus dele:
-  // o bônus do rack é um multiplicador aplicado sobre o poder de quem for colocado ali dentro, então
-  // o ganho absoluto é maior quando os melhores mineradores (maior poder) vão pro rack de
-  // maior bônus — não importa se esse rack é pequeno ou grande. Prova rápida (efeito de troca):
-  // dados dois racks com bônus b1 > b2, e dois grupos de mineradores com poder p1 > p2, colocar
-  // p1 no rack de bônus b1 sempre resulta em soma total maior ou igual à alternativa, porque
-  // p1*b1 + p2*b2 - (p1*b2 + p2*b1) = (p1-p2)*(b1-b2) ≥ 0. Por isso a ordem de prioridade dos
-  // racks pro cálculo de distribuição é simplesmente o bônus do rack, do maior pro menor —
-  // a capacidade (slots) só entra como critério de desempate.
+function executarCalculoMelhorRack(){
+  const box = document.getElementById('resultado-calculo');
+
   const racksAtivos = myRacks.filter(r => r.ativo !== false).sort((a, b) => {
     const bonusDiff = Number(b.bonus) - Number(a.bonus);
     if (bonusDiff !== 0) return bonusDiff;
@@ -3928,94 +4097,60 @@ function calcularMelhorRack(){
     return;
   }
 
-  // ordena TODOS os mineradores elegíveis, uma única vez, do maior poder pro menor (sem bônus) —
-  // essa é a fila de prioridade usada em todos os racks, na ordem em que eles forem processados
-  let poolMiners = myMiners
-    .filter(m => m.usar_rack !== false && m.ativo !== false)
-    .sort(compararMinersPorPoder);
-
   // opção do usuário (Configuração > Cálculo de distribuição), ativada por padrão
   const respeitarNomeUnico = currentProfile?.separar_mesmo_nome_racks !== false;
 
-  const resultadosPorRack = [];
-
-  for (const rack of racksAtivos){
-    const capacidade = rack.slots || 4;
-
-    if (!poolMiners.length){
-      resultadosPorRack.push({ rack, insuficiente: true });
-      continue;
-    }
-
-    const { slots, escolhidos } = montarRackGreedy(poolMiners, capacidade, respeitarNomeUnico);
-
-    if (!escolhidos.length){
-      resultadosPorRack.push({ rack, semCombinacao: true });
-      continue;
-    }
-
-    const poderTotal = escolhidos.reduce((s, m) => s + poderHsAtual(m), 0);
-
-    // O bônus do miner NÃO é aplicado sobre este rack: aqui só somamos os bônus dos miners do rack,
-    // e a soma da sala inteira é aplicada depois sobre o poder total da sala. No jogo, miners de mesmo
-    // nome e nível no mesmo rack só contam um bônus (o poder soma normal) — só acontece com a opção
-    // "Separar mineradores de mesmo nome" desativada, já que ativada eles nunca ficam no mesmo rack.
-    const chavesContadas = new Set();
-    let bonusMiners = 0;
-    escolhidos.forEach(m => {
-      const chave = chaveMiner(m.nome, m.nivel);
-      if (chavesContadas.has(chave)) return;
-      chavesContadas.add(chave);
-      bonusMiners += Number(m.bonus) || 0;
-    });
-
-    // bônus do próprio rack: esse sim é aplicado sobre o poder dos miners deste rack
-    const bonusRack = Number(rack.bonus) || 0;
-    const ganhoRack = poderTotal * bonusRack / 100;
-    const poderRack = poderTotal + ganhoRack;
-    const unidadeRef = unidadeReferencia(escolhidos);
-    const slotsUsados = escolhidos.reduce((s, m) => s + (Number(m.slots_ocupados) || 1), 0);
-
-    const resultado = { combo: escolhidos, slots, poderTotal, bonusMiners, bonusRack, ganhoRack, poderRack, unidadeRef, slotsUsados };
-
-    // remove do pool os mineradores já usados nesse rack, pro próximo rack (menor prioridade) não reaproveitar
-    const idsEscolhidos = new Set(escolhidos.map(m => m.id));
-    poolMiners = poolMiners.filter(m => !idsEscolhidos.has(m.id));
-
-    resultadosPorRack.push({ rack, resultado });
+  const RACKS_POR_SALA = 12;
+  const salasDeRacks = [];
+  for (let i = 0; i < racksAtivos.length; i += RACKS_POR_SALA){
+    salasDeRacks.push(racksAtivos.slice(i, i + RACKS_POR_SALA));
   }
 
-  const RACKS_POR_SALA = 12;
-
-  // agrupa os racks em salas de 12 (os primeiros 12 por prioridade vão pra Sala 1, os próximos 12 pra
-  // Sala 2, e assim por diante). O bônus dos miners é somado por sala e aplicado sobre o poder total
-  // da sala (soma do poder de todos os miners), não sobre cada miner nem sobre cada rack.
-  // Valor final da sala = poder base x (1 + soma dos bônus dos miners) + ganho dos bônus dos racks
+  // a sala de maior prioridade (racks de maior bônus) escolhe primeiro; o que sobrar passa pra
+  // próxima sala, e assim por diante
+  let poolRestante = myMiners.filter(m => m.usar_rack !== false && m.ativo !== false);
   const salas = [];
-  resultadosPorRack.forEach((item, i) => {
-    const idx = Math.floor(i / RACKS_POR_SALA);
-    if (!salas[idx]) salas[idx] = { numero: idx + 1, poderBase: 0, bonusMiners: 0, ganhoRacks: 0, racks: 0, combo: [] };
-    if (!item.resultado) return;
-    const sala = salas[idx];
-    sala.poderBase += item.resultado.poderTotal;
-    sala.bonusMiners += item.resultado.bonusMiners;
-    sala.ganhoRacks += item.resultado.ganhoRack;
-    sala.racks++;
-    sala.combo.push(...item.resultado.combo);
-  });
-  salas.forEach(sala => {
-    sala.valorFinal = sala.poderBase * (1 + sala.bonusMiners / 100) + sala.ganhoRacks;
-    sala.unidadeRef = sala.combo.length ? unidadeReferencia(sala.combo) : 'H/s';
+  const resultadosPorRack = [];
+  let algumaAproximada = false;
+
+  salasDeRacks.forEach((racksDaSala, idx) => {
+    const racksOrdenados = [...racksDaSala].sort((a, b) => {
+      const bonusDiff = Number(b.bonus) - Number(a.bonus);
+      if (bonusDiff !== 0) return bonusDiff;
+      return (Number(b.slots) || 4) - (Number(a.slots) || 4);
+    });
+
+    const valorFinalAntiga = calcularSalaMetodoAntigo(poolRestante, racksOrdenados, respeitarNomeUnico);
+
+    const melhor = otimizarSala(poolRestante, racksDaSala, respeitarNomeUnico);
+    if (melhor.aproximado) algumaAproximada = true;
+
+    const comboFinal = melhor.porRack.filter(r => r.resultado).flatMap(r => r.resultado.combo);
+
+    salas.push({
+      numero: idx + 1,
+      poderBase: melhor.poderBase,
+      colBonus: melhor.colBonus,
+      ganhoRacks: melhor.ganhoRacks,
+      valorFinal: melhor.valorFinal,
+      valorFinalAntiga,
+      diferenca: melhor.valorFinal - valorFinalAntiga,
+      aproximado: melhor.aproximado,
+      unidadeRef: comboFinal.length ? unidadeReferencia(comboFinal) : 'H/s',
+    });
+    resultadosPorRack.push(...melhor.porRack);
+
+    poolRestante = melhor.poolRestante;
   });
 
-  // soma de todos os racks que tiveram resultado (ignora os "insuficiente"/"semCombinacao")
   const poderTotalGeral = salas.reduce((s, sala) => s + sala.poderBase, 0);
   const valorFinalGeral = salas.reduce((s, sala) => s + sala.valorFinal, 0);
+  const valorFinalGeralAntiga = salas.reduce((s, sala) => s + sala.valorFinalAntiga, 0);
   const racksComResultado = resultadosPorRack.filter(item => item.resultado).length;
 
   const resumoGeral = `
     <div class="card" style="border-color:var(--gold-dim); background:rgba(232,185,62,0.05);">
-      <div class="section-title">Soma geral (todos os racks)</div>
+      <div class="section-title">Soma geral (todos os racks)${algumaAproximada ? ' <span class="tag-off">tem sala aproximada</span>' : ''}</div>
       <div class="result-summary" style="flex-wrap:wrap; gap:14px;">
         <div class="metric">
           <div class="val">${formatarPoder(poderTotalGeral)}</div>
@@ -4023,7 +4158,11 @@ function calcularMelhorRack(){
         </div>
         <div class="metric">
           <div class="val">${formatarPoder(valorFinalGeral)}</div>
-          <div class="lbl">Valor final (com bônus)</div>
+          <div class="lbl">Total Power (com bônus)</div>
+        </div>
+        <div class="metric">
+          <div class="val">${valorFinalGeral - valorFinalGeralAntiga >= 0 ? '+' : ''}${formatarPoder(valorFinalGeral - valorFinalGeralAntiga)}</div>
+          <div class="lbl">vs. fila simples por poder</div>
         </div>
         <div class="metric">
           <div class="val">${racksComResultado}</div>
@@ -4036,9 +4175,10 @@ function calcularMelhorRack(){
   // cartão de total de cada sala, exibido antes dos racks daquela sala
   const cardSala = (sala) => `
     <div class="card" style="border-color:var(--gold-dim);">
-      <div class="section-title">Sala ${sala.numero} — total da sala</div>
+      <div class="section-title">Sala ${sala.numero} — total da sala${sala.aproximado ? ' <span class="tag-off">aproximado</span>' : ''}</div>
       <p class="hint" style="margin:0 0 10px; text-align:left;">
-        O bônus dos mineradores é somado e aplicado sobre o poder total de todos os mineradores da sala.
+        Testou combinações de quais tipos de minerador (nome+nível) entram na sala pra achar o maior
+        Total Power possível${sala.aproximado ? ' (catálogo grande — usou uma busca aproximada por ganho marginal, não testou 100% das combinações)' : ' (busca exaustiva — testou todas as combinações de tipos)'}.
       </p>
       <div class="result-summary" style="flex-wrap:wrap; gap:14px;">
         <div class="metric">
@@ -4046,16 +4186,20 @@ function calcularMelhorRack(){
           <div class="lbl">Poder total dos miners</div>
         </div>
         <div class="metric">
-          <div class="val">${sala.bonusMiners.toFixed(2)}%</div>
-          <div class="lbl">Bônus dos miners (soma)</div>
+          <div class="val">${sala.colBonus.toFixed(2)}%</div>
+          <div class="lbl">Collection Bonus</div>
         </div>
         <div class="metric">
           <div class="val">${formatarPoderDesde(sala.ganhoRacks, sala.unidadeRef)}</div>
-          <div class="lbl">Ganho dos bônus dos racks</div>
+          <div class="lbl">Rack Bonus (ganho)</div>
         </div>
         <div class="metric">
           <div class="val">${formatarPoderDesde(sala.valorFinal, sala.unidadeRef)}</div>
-          <div class="lbl">Valor final da sala</div>
+          <div class="lbl">Total Power da sala</div>
+        </div>
+        <div class="metric">
+          <div class="val">${sala.diferenca >= 0 ? '+' : ''}${formatarPoderDesde(sala.diferenca, sala.unidadeRef)}</div>
+          <div class="lbl">vs. fila simples por poder</div>
         </div>
       </div>
     </div>
@@ -4064,6 +4208,10 @@ function calcularMelhorRack(){
   const resumoPrioridade = `
     <div class="card">
       <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
+      <p class="hint" style="margin:0 0 10px; text-align:left;">
+        Define a ordem em que as salas (grupos de até 12 racks) escolhem os miners disponíveis — a
+        distribuição dentro de cada sala é decidida testando combinações, não por essa ordem.
+      </p>
       ${racksAtivos.map((r, i) => `
         <div class="alt-item">
           <div class="names">${i + 1}. ${escapeHtml(nomeComNivel(r))} (${r.slots || 4} slots)</div>
@@ -4176,17 +4324,13 @@ function calcularMelhorRack(){
             <div class="lbl">Poder total</div>
           </div>
           <div class="metric">
-            <div class="val">${r.bonusMiners.toFixed(2)}%</div>
-            <div class="lbl">Bônus dos miners (vai pra sala)</div>
-          </div>
-          <div class="metric">
             <div class="val">${formatarPoderDesde(r.poderRack, r.unidadeRef)}</div>
             <div class="lbl">Poder c/ bônus do rack (${fmtNum(r.bonusRack)}%)</div>
           </div>
         </div>
       </div>
     `;
-  }).join('') + renderMinersSobrando(poolMiners);
+  }).join('') + renderMinersSobrando(poolRestante);
 }
 
 // Lista, ao final do resultado, os miners que não couberam em nenhum rack (sem slot disponível)
