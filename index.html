@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4022,8 +4022,23 @@ function otimizarSala(poolDisponivel, racksDaSala, respeitarNomeUnico){
     return (Number(b.slots) || 4) - (Number(a.slots) || 4);
   });
 
+  // IMPORTANTE: cada combinação testada só monta seu pool candidato com os membros dos tipos que
+  // ela ativa — um miner de um tipo que NÃO está na combinação vencedora nunca entra nesse pool, e
+  // por isso o poolRestante que cada avaliarCombinacaoTipos devolve não inclui esse miner. Se a gente
+  // usasse esse poolRestante direto, o miner sumiria do cálculo inteiro: não ia pra nenhum rack, não
+  // sobrava pra próxima sala, não aparecia em "Sem rack disponível" — ele simplesmente desaparecia.
+  // Por isso, no final, sempre recalculamos o pool restante REAL a partir de TODO o poolDisponivel
+  // (todos os tipos, testados ou não), tirando só quem de fato foi colocado em algum rack.
+  const poolRestanteReal = (melhor) => {
+    const idsColocados = new Set(
+      melhor.porRack.filter(r => r.resultado).flatMap(r => r.resultado.combo).map(m => m.id)
+    );
+    return poolDisponivel.filter(m => !idsColocados.has(m.id));
+  };
+
   if (!grupos.length){
-    return { ...avaliarCombinacaoTipos([], mapaBonusPorTipo, 0, racksOrdenados, respeitarNomeUnico), aproximado: false };
+    const base = avaliarCombinacaoTipos([], mapaBonusPorTipo, 0, racksOrdenados, respeitarNomeUnico);
+    return { ...base, poolRestante: poolRestanteReal(base), aproximado: false };
   }
 
   if (grupos.length <= LIMITE_TIPOS_EXATO){
@@ -4035,7 +4050,7 @@ function otimizarSala(poolDisponivel, racksDaSala, respeitarNomeUnico){
       const resultado = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascara, racksOrdenados, respeitarNomeUnico);
       if (!melhor || resultado.valorFinal > melhor.valorFinal) melhor = resultado;
     }
-    return { ...melhor, aproximado: false };
+    return { ...melhor, poolRestante: poolRestanteReal(melhor), aproximado: false };
   }
 
   // Catálogo grande demais pra busca exaustiva (mais tipos distintos que LIMITE_TIPOS_EXATO) —
@@ -4062,7 +4077,7 @@ function otimizarSala(poolDisponivel, racksDaSala, respeitarNomeUnico){
       melhorou = true;
     }
   }
-  return { ...melhor, aproximado: true };
+  return { ...melhor, poolRestante: poolRestanteReal(melhor), aproximado: true };
 }
 
 // Roda o método antigo (fila única por poder, sem testar combinações de tipo) na mesma sala e pool,
