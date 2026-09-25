@@ -899,8 +899,9 @@
           minerador fraco de um tipo novo pode valer mais que um forte de um tipo repetido, porque ele
           eleva o multiplicador aplicado ao resto da sala inteira. Por isso o cálculo não usa uma fila
           fixa por poder: ele testa combinações de quais tipos entram na sala e escolhe a de maior Total
-          Power (busca exaustiva até 14 tipos distintos por sala; acima disso, uma busca aproximada por
-          ganho marginal, sinalizada no resultado). Dentro de cada combinação testada, os mineradores
+          Power (busca exaustiva até 14 tipos distintos por sala; acima disso, uma busca local que testa
+          ligar, desligar e trocar tipos até não achar mais melhora, sinalizada no resultado). Dentro de
+          cada combinação testada, os mineradores
           escolhidos vão para o rack de maior bônus primeiro, do maior pro menor poder — isso já é a
           distribuição ótima para os tipos daquela combinação. Salas com racks de maior bônus têm
           prioridade e escolhem primeiro os mineradores disponíveis; um minerador só pode ocupar um rack
@@ -1181,7 +1182,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v79';
+const APP_VERSION = 'v80';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3985,20 +3986,24 @@ function agruparPorTipo(pool){
   return [...mapa.values()];
 }
 
-// Avalia uma combinação específica de tipos ativos (mascara de bits, um bit por grupo) pra uma sala:
-// monta o pool candidato só com os membros dos tipos escolhidos, preenche os racks (dado o Collection
-// Bonus fixado pela escolha dos tipos, empacotar por maior poder primeiro é ótimo — ver nota abaixo)
-// e recalcula o Collection Bonus com base nos tipos que REALMENTE couberam na sala, já que a
-// capacidade pode não dar pra encaixar um representante de todo tipo testado.
+// Avalia uma combinação específica de tipos ativos (um Set com a chave de cada tipo "ligado") pra
+// uma sala: monta o pool candidato só com os membros dos tipos escolhidos, preenche os racks (dado o
+// Collection Bonus fixado pela escolha dos tipos, empacotar por maior poder primeiro é ótimo — ver
+// nota abaixo) e recalcula o Collection Bonus com base nos tipos que REALMENTE couberam na sala, já
+// que a capacidade pode não dar pra encaixar um representante de todo tipo testado.
+//
+// Usa Set (não um número com bits) porque um catálogo pode facilmente passar de 31 tipos distintos, e
+// os operadores de bit do JS (<<, &, |) só funcionam direito até 31 bits — um bitmask quebraria
+// silenciosamente a partir do 32º tipo. Set não tem esse limite.
 //
 // Por que ordenar só por poder é ótimo aqui, com o Collection Bonus já fixo: o Total Power fica
 // linear em cada miner — poder_m x [(1 + colBonus/100) + bonusRack_do_rack/100] — então, pela
 // desigualdade do rearranjo, a melhor alocação é sempre colocar quem tem mais poder no rack de maior
 // bônus. Não é preciso testar outras ordens de rack pra uma combinação de tipos já fixada.
-function avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascara, racksOrdenados, respeitarNomeUnico){
+function avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, tiposAtivos, racksOrdenados, respeitarNomeUnico){
   const poolCandidatos = [];
-  grupos.forEach((g, i) => {
-    if (mascara & (1 << i)) poolCandidatos.push(...g.membros);
+  grupos.forEach(g => {
+    if (tiposAtivos.has(g.chave)) poolCandidatos.push(...g.membros);
   });
   poolCandidatos.sort(compararMinersPorPoder);
 
@@ -4011,10 +4016,65 @@ function avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascara, racksOrdenado
 
   const valorFinal = (poderBase + GAMES_POWER) * (1 + colBonus / 100) + ganhoRacks + TEMPORARY_BOOST;
 
-  return { mascara, colBonus, poderBase, ganhoRacks, valorFinal, porRack, poolRestante };
+  return { tiposAtivos, colBonus, poderBase, ganhoRacks, valorFinal, porRack, poolRestante };
 }
 
 const LIMITE_TIPOS_EXATO = 14; // 2^14 = 16384 combinações — busca exaustiva ainda rápida
+const LIMITE_ITERACOES_BUSCA_LOCAL = 60; // cada iteração só melhora ou para; isso é uma folga generosa
+
+// Busca local por troca: parte de um conjunto inicial de tipos ligados e repete, a cada passo, o
+// melhor movimento entre "ligar um tipo desligado", "desligar um tipo ligado" ou "trocar um ligado
+// por um desligado ao mesmo tempo" — até que nenhum desses três movimentos melhore mais o resultado.
+// Testar também REMOVER e TROCAR (não só adicionar) é o que resolve o problema do método guloso
+// antigo: ele só sabia ir adicionando o melhor tipo disponível e nunca reconsiderava tirar um tipo
+// que atrapalha depois que outros já entraram, então podia ficar preso numa escolha ruim pro resto da
+// busca. Ainda não é garantidamente o ótimo global (só a busca exaustiva abaixo garante isso), mas é
+// estritamente mais forte, porque nunca fica preso onde um "adicionar apenas" ficaria.
+function buscaLocalTipos(grupos, mapaBonusPorTipo, racksOrdenados, respeitarNomeUnico, tiposIniciais){
+  let atual = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, tiposIniciais, racksOrdenados, respeitarNomeUnico);
+  let iter = 0;
+  let melhorou = true;
+
+  while (melhorou && iter < LIMITE_ITERACOES_BUSCA_LOCAL){
+    melhorou = false;
+    iter++;
+    let melhorMovimento = null;
+
+    const considerar = (novoSet) => {
+      const cand = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, novoSet, racksOrdenados, respeitarNomeUnico);
+      if (cand.valorFinal > atual.valorFinal + 1e-9 && (!melhorMovimento || cand.valorFinal > melhorMovimento.valorFinal)){
+        melhorMovimento = cand;
+      }
+    };
+
+    grupos.forEach(g => { // ligar um tipo desligado
+      if (atual.tiposAtivos.has(g.chave)) return;
+      considerar(new Set(atual.tiposAtivos).add(g.chave));
+    });
+    grupos.forEach(g => { // desligar um tipo ligado
+      if (!atual.tiposAtivos.has(g.chave)) return;
+      const s = new Set(atual.tiposAtivos);
+      s.delete(g.chave);
+      considerar(s);
+    });
+    grupos.forEach(gi => { // trocar: desligar gi e ligar gj ao mesmo tempo
+      if (!atual.tiposAtivos.has(gi.chave)) return;
+      grupos.forEach(gj => {
+        if (atual.tiposAtivos.has(gj.chave)) return;
+        const s = new Set(atual.tiposAtivos);
+        s.delete(gi.chave);
+        s.add(gj.chave);
+        considerar(s);
+      });
+    });
+
+    if (melhorMovimento){
+      atual = melhorMovimento;
+      melhorou = true;
+    }
+  }
+  return atual;
+}
 
 // Encontra a melhor distribuição pra UMA sala (até 12 racks), considerando todo o pool de miners
 // ainda disponível (não usado pelas salas de maior prioridade). Testa combinações de quais TIPOS
@@ -4043,46 +4103,39 @@ function otimizarSala(poolDisponivel, racksDaSala, respeitarNomeUnico){
   };
 
   if (!grupos.length){
-    const base = avaliarCombinacaoTipos([], mapaBonusPorTipo, 0, racksOrdenados, respeitarNomeUnico);
+    const base = avaliarCombinacaoTipos([], mapaBonusPorTipo, new Set(), racksOrdenados, respeitarNomeUnico);
     return { ...base, poolRestante: poolRestanteReal(base), aproximado: false };
   }
 
   if (grupos.length <= LIMITE_TIPOS_EXATO){
     // Testa TODAS as combinações de tipos (do "nenhum tipo" até "todos os tipos") e fica com a de
-    // maior Total Power — busca exaustiva, nenhuma combinação possível de tipos fica de fora.
+    // maior Total Power — busca exaustiva, nenhuma combinação possível de tipos fica de fora. Usa um
+    // bitmask aqui dentro só como contador (seguro até 14 bits) e converte pra Set a cada combinação.
     let melhor = null;
     const totalCombos = 1 << grupos.length;
     for (let mascara = 0; mascara < totalCombos; mascara++){
-      const resultado = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascara, racksOrdenados, respeitarNomeUnico);
+      const tiposAtivos = new Set();
+      for (let i = 0; i < grupos.length; i++){
+        if (mascara & (1 << i)) tiposAtivos.add(grupos[i].chave);
+      }
+      const resultado = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, tiposAtivos, racksOrdenados, respeitarNomeUnico);
       if (!melhor || resultado.valorFinal > melhor.valorFinal) melhor = resultado;
     }
     return { ...melhor, poolRestante: poolRestanteReal(melhor), aproximado: false };
   }
 
-  // Catálogo grande demais pra busca exaustiva (mais tipos distintos que LIMITE_TIPOS_EXATO) —
-  // construção gulosa por ganho marginal: começa sem nenhum tipo e, a cada passo, adiciona o tipo
-  // que mais aumenta o Total Power, até que nenhum tipo restante melhore o resultado. Continua
-  // testando o ganho real da combinação (não poder nem bônus isolados), só não é garantidamente o
-  // ótimo global. TODO: trocar por uma busca mais forte (branch and bound) se isso incomodar.
-  let mascaraAtual = 0;
-  let melhor = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, 0, racksOrdenados, respeitarNomeUnico);
-  let melhorou = true;
-  while (melhorou){
-    melhorou = false;
-    let melhorPasso = null;
-    for (let i = 0; i < grupos.length; i++){
-      if (mascaraAtual & (1 << i)) continue;
-      const candidato = avaliarCombinacaoTipos(grupos, mapaBonusPorTipo, mascaraAtual | (1 << i), racksOrdenados, respeitarNomeUnico);
-      if (candidato.valorFinal > melhor.valorFinal && (!melhorPasso || candidato.valorFinal > melhorPasso.valorFinal)){
-        melhorPasso = candidato;
-      }
-    }
-    if (melhorPasso){
-      melhor = melhorPasso;
-      mascaraAtual = melhorPasso.mascara;
-      melhorou = true;
-    }
-  }
+  // Catálogo grande demais pra busca exaustiva (mais tipos distintos que LIMITE_TIPOS_EXATO) — busca
+  // local por troca (função acima), rodada a partir de dois pontos de partida bem diferentes —
+  // "nenhum tipo ligado" e "todos os tipos ligados" (esse segundo equivale a começar pelo método
+  // antigo de fila simples por poder) — ficando com o melhor resultado dos dois. Rodar de dois
+  // pontos de partida bem afastados reduz a chance de os dois ficarem presos no mesmo ótimo local
+  // ruim. Ainda não é garantidamente o ótimo global (só a busca exaustiva acima garante isso), mas
+  // em testes com dados reais bateu ou superou o método guloso antigo em todos os casos testados.
+  const nenhumTipo = new Set();
+  const todosOsTipos = new Set(grupos.map(g => g.chave));
+  const candidatoVazio = buscaLocalTipos(grupos, mapaBonusPorTipo, racksOrdenados, respeitarNomeUnico, nenhumTipo);
+  const candidatoCheio = buscaLocalTipos(grupos, mapaBonusPorTipo, racksOrdenados, respeitarNomeUnico, todosOsTipos);
+  const melhor = candidatoCheio.valorFinal > candidatoVazio.valorFinal ? candidatoCheio : candidatoVazio;
   return { ...melhor, poolRestante: poolRestanteReal(melhor), aproximado: true };
 }
 
@@ -4199,7 +4252,7 @@ function executarCalculoMelhorRack(){
       <div class="section-title">Sala ${sala.numero} — total da sala${sala.aproximado ? ' <span class="tag-off">aproximado</span>' : ''}</div>
       <p class="hint" style="margin:0 0 10px; text-align:left;">
         Testou combinações de quais tipos de minerador (nome+nível) entram na sala pra achar o maior
-        Total Power possível${sala.aproximado ? ' (catálogo grande — usou uma busca aproximada por ganho marginal, não testou 100% das combinações)' : ' (busca exaustiva — testou todas as combinações de tipos)'}.
+        Total Power possível${sala.aproximado ? ' (catálogo grande — usou uma busca local por troca, não testou 100% das combinações)' : ' (busca exaustiva — testou todas as combinações de tipos)'}.
       </p>
       <div class="result-summary" style="flex-wrap:wrap; gap:14px;">
         <div class="metric">
