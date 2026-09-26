@@ -1182,7 +1182,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v82';
+const APP_VERSION = 'v83';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2079,6 +2079,12 @@ async function salvarUsuario(id){
   if (liberado){
     payload.aviso_pagamento_em = null;
     payload.aviso_pagamento_plano = null;
+    // liberação manual do Criador mantendo o plano Free: se sobrar um trial_fim vencido
+    // (do teste grátis automático que esse usuário já usou), a checagem de trial vencido
+    // desfaz essa liberação sozinha no próximo login/refresh. Limpa o trial_fim aqui pra
+    // essa liberação manual realmente "pegar" — deixa de ser um teste grátis com prazo e
+    // vira acesso Free liberado diretamente pelo Criador, sem data de vencimento.
+    if (plano === 'free') payload.trial_fim = null;
   }
 
   const { error } = await supabaseClient.from('profiles')
