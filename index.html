@@ -893,11 +893,11 @@
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
           Total Power = (Poder dos miners + Games) × (1 + Collection Bonus) + Rack Bonus + Temporary.
           Este app ainda não cadastra Games nem Temporary, então essas parcelas entram como 0. O
-          Collection Bonus é a soma do bônus de cada TIPO de minerador (nome+nível) presente na sala,
-          contado uma única vez por tipo. <b>Como o cálculo funciona:</b> (1) só racks ativos, do maior
+          Collection Bonus é a soma do bônus dos mineradores da sala; dois mineradores de mesmo
+          nome e nível só não somam o bônus quando estão no mesmo rack (em racks diferentes, somam). <b>Como o cálculo funciona:</b> (1) só racks ativos, do maior
           bônus pro menor — empate: mais slots, depois nome — no máximo 12 por sala; (2) monta todas as
-          combinações de 2 mineradores de 1 slot (soma poder e bônus; mesmo nome e nível não soma o
-          bônus de novo); (3) o par ou minerador de 2 slots de maior poder vai pro primeiro rack; (4) a
+          combinações de 2 mineradores de 1 slot (soma poder e bônus; mesmo nome e nível na mesma
+          prateleira não soma o bônus de novo); (3) o par ou minerador de 2 slots de maior poder vai pro primeiro rack; (4) a
           cada prateleira seguinte, testa o de maior poder contra o de maior bônus, calcula o Total Power
           da sala com cada um e fica com o vencedor; (5) repete até acabarem os racks ou os
           mineradores, respeitando os slots de cada rack.
@@ -1043,7 +1043,7 @@
           deles conta, o poder soma normal). Com esta opção ativada, o cálculo nunca coloca dois
           mineradores de mesmo nome e nível no mesmo rack (ShaleRig II e ShaleRig III contam como
           diferentes) — se houver mais de um disponível, eles são espalhados em racks
-          diferentes pra cada bônus contar. Fica ativada por padrão em cadastros novos. (A partir da v87 o cálculo usa o método dos pares — mesmo nome e nível na mesma prateleira contam o bônus uma vez só — e esta opção não é aplicada.)
+          diferentes pra cada bônus contar. Fica ativada por padrão em cadastros novos. (A partir da v87 o cálculo usa o método dos pares e esta opção não é aplicada: o próprio cálculo já espalha mineradores iguais em racks diferentes quando isso rende mais bônus.)
         </p>
         <div class="field">
           <label class="check-line"><input type="checkbox" id="config-separar-mesmo-nome" checked onchange="salvarPreferenciaDistribuicao()"> Separar mineradores de mesmo nome em racks diferentes</label>
@@ -1173,7 +1173,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v87';
+const APP_VERSION = 'v88';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4011,8 +4011,10 @@ function calcularMelhorRackIndice(){
        calcula o Total Power da sala com cada um, e o vencedor entra definitivo no rack e sai das listas.
    05) Repete até acabarem os racks (12) ou os miners; cada rack respeita a sua quantidade de slots.
 
-   Total Power = (Poder dos miners + Games) x (1 + soma dos bônus dos tipos presentes na sala)
-                 + Rack Bonus + Temporary. Cada tipo (nome+nível) conta o bônus uma única vez na sala. */
+   Total Power = (Poder dos miners + Games) x (1 + soma dos bônus dos miners da sala)
+                 + Rack Bonus + Temporary.
+   Regra do RollerCoin: o bônus de dois miners de mesmo nome e nível só deixa de contar quando eles
+   estão no MESMO rack; em racks diferentes cada um soma o seu bônus normalmente. */
 const GAMES_POWER = 0;      // não cadastrado no app ainda
 const TEMPORARY_BOOST = 0;  // não cadastrado no app ainda
 const MAX_RACKS_POR_SALA = 12;
@@ -4081,16 +4083,16 @@ function distribuirMinersNaSala(racksSala, poolMiners){
   let tabelaBonus = [...tabelaParesPorBonus, ...unidadesDuplos].sort(cmpUnidadePorBonus);
 
   const usados = new Set();      // ids dos miners já alocados definitivamente
-  const tiposNaSala = new Set(); // tipos (nome+nível) já presentes na sala
+  let tiposNoRack = new Set();   // tipos (nome+nível) já presentes no rack ATUAL (zera a cada rack)
   let somaPoder = 0;             // soma dos poderes já alocados
-  let somaBonus = 0;             // soma dos bônus dos tipos já presentes na sala
+  let somaBonus = 0;             // soma dos bônus da sala (cada tipo conta uma vez POR RACK)
   let ganhoRacks = 0;            // soma do ganho de Rack Bonus
 
   const disponivel = u => u.membros.every(m => !usados.has(m.id));
-  // bônus que a unidade realmente acrescenta à sala (tipos que já estão na sala não somam de novo)
+  // bônus que a unidade realmente acrescenta à sala: só não soma tipo que já está no MESMO rack
   const bonusNovo = u => {
     let s = 0;
-    u.tipos.forEach((b, k) => { if (!tiposNaSala.has(k)) s += b; });
+    u.tipos.forEach((b, k) => { if (!tiposNoRack.has(k)) s += b; });
     return s;
   };
   // Total Power da sala se esta unidade entrasse agora na prateleira
@@ -4122,6 +4124,7 @@ function distribuirMinersNaSala(racksSala, poolMiners){
   let primeiraColocacao = true;
   for (const est of estados){
     const bonusRackPct = Number(est.rack.bonus) || 0;
+    tiposNoRack = new Set(); // rack novo: mesmo nome e nível voltam a somar o bônus
     // o catálogo só aceita racks de 6 ou 8 slots; cada prateleira tem 2 slots
     const numPrateleiras = Math.floor(est.capacidade / 2);
 
@@ -4169,7 +4172,7 @@ function distribuirMinersNaSala(racksSala, poolMiners){
       // atualiza a sala e retira o(s) miner(s) de todas as listas
       ms.forEach(m => usados.add(m.id));
       escolhida.tipos.forEach((b, k) => {
-        if (!tiposNaSala.has(k)){ tiposNaSala.add(k); somaBonus += b; }
+        if (!tiposNoRack.has(k)){ tiposNoRack.add(k); somaBonus += b; }
       });
       somaPoder += escolhida.poder;
       ganhoRacks += escolhida.poder * bonusRackPct / 100;
