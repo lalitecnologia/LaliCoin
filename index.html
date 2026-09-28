@@ -1177,7 +1177,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v85';
+const APP_VERSION = 'v86';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4033,7 +4033,7 @@ async function executarCalculoMelhorRack(){
   const poolParaRacks = myMiners.filter(m => m.usar_rack !== false && m.ativo !== false).sort(compararMinersPorPoder);
 
   const RACKS_POR_SALA = 12;
-  const { porRack, poderBase: poderTotalGeral, ganhoRacks: ganhoRacksGeral } =
+  const { porRack, poderBase: poderTotalGeral, ganhoRacks: ganhoRacksGeral, poolRestante } =
     preencherRacksComPool(poolParaRacks, racksAtivos, respeitarNomeUnico);
 
   const valorFinalGeral = (poderTotalGeral + GAMES_POWER) * (1 + colBonusGlobal / 100) + ganhoRacksGeral + TEMPORARY_BOOST;
