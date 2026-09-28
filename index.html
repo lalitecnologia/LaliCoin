@@ -900,7 +900,9 @@
           prateleira não soma o bônus de novo); (3) o par ou minerador de 2 slots de maior poder vai pro primeiro rack; (4) a
           cada prateleira seguinte, testa o de maior poder contra o de maior bônus, calcula o Total Power
           da sala com cada um e fica com o vencedor; (5) repete até acabarem os racks ou os
-          mineradores, respeitando os slots de cada rack.
+          mineradores, respeitando os slots de cada rack; (6) reavalia tudo com o poder e o bônus finais
+          estimados da sala (o bônus vale mais quando há muito poder); (7) tenta trocas entre mineradores,
+          racks e prateleiras, aceitando toda troca que aumenta o Total Power.
         </p>
       </div>
 
@@ -1043,7 +1045,7 @@
           deles conta, o poder soma normal). Com esta opção ativada, o cálculo nunca coloca dois
           mineradores de mesmo nome e nível no mesmo rack (ShaleRig II e ShaleRig III contam como
           diferentes) — se houver mais de um disponível, eles são espalhados em racks
-          diferentes pra cada bônus contar. Fica ativada por padrão em cadastros novos. (A partir da v87 o cálculo usa o método dos pares e esta opção não é aplicada: o próprio cálculo já espalha mineradores iguais em racks diferentes quando isso rende mais bônus.)
+          diferentes pra cada bônus contar. Fica ativada por padrão em cadastros novos. (A partir da v87 o cálculo usa o método dos pares (com reavaliação e trocas desde a v89) e esta opção não é aplicada: o próprio cálculo já espalha mineradores iguais em racks diferentes quando isso rende mais bônus.)
         </p>
         <div class="field">
           <label class="check-line"><input type="checkbox" id="config-separar-mesmo-nome" checked onchange="salvarPreferenciaDistribuicao()"> Separar mineradores de mesmo nome em racks diferentes</label>
@@ -1173,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v88';
+const APP_VERSION = 'v89';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4070,7 +4072,7 @@ function montarTabelasDePares(simples){
 
 // PASSOS 03, 04 e 05 — distribui os miners nos racks da sala (já ordenados e limitados a 12).
 // poolMiners: miners ativos que podem entrar no cálculo. Retorna o mesmo formato usado pela tela.
-function distribuirMinersNaSala(racksSala, poolMiners){
+function distribuirMinersGuloso(racksSala, poolMiners){
   const duplos = poolMiners.filter(m => slotsDoMiner(m) >= 2);
   const simples = [...poolMiners.filter(m => slotsDoMiner(m) < 2)].sort(compararMinersPorPoder);
 
@@ -4210,6 +4212,377 @@ function distribuirMinersNaSala(racksSala, poolMiners){
   };
 }
 
+/* ---------------- Refinamento (v89) ----------------
+   O método dos passos 01 a 05 (distribuirMinersGuloso) monta a primeira sala. Como ele decide prateleira
+   por prateleira com o poder e o bônus "do momento", este refinamento confere o resultado com o
+   Total Power real da sala inteira:
+   6) REAVALIAÇÃO: estima o poder (P) e o bônus (B) FINAIS da sala e monta tudo de novo dando a cada
+      prateleira o valor  poder x (1 + B + bônus do rack) + P x bônus novo  — assim o bônus vale mais
+      quando a sala tem muito poder. Repete com o P e o B do novo resultado (até 8 vezes) e fica com a
+      sala de maior Total Power.
+   7) TROCAS: com o Total Power real como juiz, tenta trocar um miner colocado por um que sobrou, trocar
+      miners e prateleiras inteiras entre racks, e trocar par de 1 slot por miner de 2 slots (e vice-versa).
+      Aceita toda troca que aumenta o total e repete até nenhuma melhorar (ou até o tempo limite). */
+const TEMPO_MAX_REFINO_MS = 4000; // tempo total das trocas, dividido entre os pontos de partida
+const EPS_REL = 1e-12;
+
+function classeSlots(m){ return slotsDoMiner(m) >= 2 ? 2 : 1; }
+
+// poder, bônus (cada tipo uma vez no rack) e ganho de Rack Bonus de um rack, dado o conteúdo das prateleiras
+function estatisticasPrateleiras(prateleiras, pct, poder){
+  let p = 0, b = 0;
+  const tipos = new Set();
+  for (const sh of prateleiras){
+    for (const m of sh){
+      p += poder(m);
+      const k = chaveMiner(m.nome, m.nivel);
+      if (!tipos.has(k)){ tipos.add(k); b += Number(m.bonus) || 0; }
+    }
+  }
+  return { p, b, g: p * pct / 100 };
+}
+
+function totalPowerDe(P, B, G){
+  return (P + GAMES_POWER) * (1 + B / 100) + G + TEMPORARY_BOOST;
+}
+
+function somasDoLayout(layout, poder){
+  let P = 0, B = 0, G = 0;
+  layout.forEach(rk => {
+    const e = estatisticasPrateleiras(rk.shelves, rk.pct, poder);
+    P += e.p; B += e.b; G += e.g;
+  });
+  return { P, B, G, total: totalPowerDe(P, B, G) };
+}
+
+// converte o resultado do método inicial (slots por rack) em prateleiras: cada prateleira é uma lista
+// com 1 miner (de 2 slots, ou 1 slot sozinho) ou 2 miners de 1 slot
+function layoutDeResultado(porRack){
+  return porRack.map(item => {
+    const rack = item.rack;
+    const shelves = [];
+    if (item.resultado){
+      const slots = item.resultado.slots;
+      for (let i = 0; i < slots.length; i += 2){
+        const a = slots[i], b = slots[i + 1];
+        if (a && b && a === b) shelves.push([a]);
+        else {
+          const sh = [a, b].filter(Boolean);
+          if (sh.length) shelves.push(sh);
+        }
+      }
+    }
+    return { rack, pct: Number(rack.bonus) || 0, shelves };
+  });
+}
+
+// PASSO 6 — monta a sala de novo avaliando cada opção de prateleira com o P e o B finais estimados
+function reconstruirComEstimativa(racksSala, unidades, simples, P, B){
+  const usados = new Set();
+  let restantes = unidades;
+  const layout = racksSala.map(rack => ({ rack, pct: Number(rack.bonus) || 0, shelves: [] }));
+  for (const rk of layout){
+    const numPrat = Math.floor((rk.rack.slots || 4) / 2);
+    const tiposRack = new Set();
+    for (let p = 0; p < numPrat; p++){
+      let melhor = null;
+      let melhorValor = -Infinity;
+      for (const u of restantes){
+        let novo = 0;
+        u.tipos.forEach((b, k) => { if (!tiposRack.has(k)) novo += b; });
+        const valor = u.poder * (1 + B / 100 + rk.pct / 100) + P * novo / 100;
+        if (valor > melhorValor || (valor === melhorValor && melhor && u.poder > melhor.poder)){
+          melhor = u;
+          melhorValor = valor;
+        }
+      }
+      if (!melhor){
+        const s = simples.find(m => !usados.has(m.id));
+        if (!s) break; // acabaram os miners
+        melhor = criarUnidadePrateleira([s]);
+      }
+      rk.shelves.push(melhor.membros);
+      melhor.membros.forEach(m => usados.add(m.id));
+      melhor.tipos.forEach((b, k) => tiposRack.add(k));
+      restantes = restantes.filter(u => u.membros.every(m => !usados.has(m.id)));
+    }
+  }
+  return layout;
+}
+
+// PASSO 7 — melhoria local por trocas, sempre conferindo o Total Power real da sala
+function melhorarPorTrocas(layout, pool, poder, limiteMs){
+  const inicio = Date.now();
+  const usados = new Set();
+  layout.forEach(rk => rk.shelves.forEach(sh => sh.forEach(m => usados.add(m.id))));
+  let livres = pool.filter(m => !usados.has(m.id));
+  const st = layout.map(rk => estatisticasPrateleiras(rk.shelves, rk.pct, poder));
+  let P = 0, B = 0, G = 0;
+  const recalcular = () => {
+    P = 0; B = 0; G = 0;
+    st.forEach(e => { P += e.p; B += e.b; G += e.g; });
+  };
+  recalcular();
+
+  const avaliar = alts => {
+    let nP = P, nB = B, nG = G;
+    const novos = alts.map(a => {
+      const n = estatisticasPrateleiras(a.shelves, layout[a.i].pct, poder);
+      nP += n.p - st[a.i].p; nB += n.b - st[a.i].b; nG += n.g - st[a.i].g;
+      return n;
+    });
+    return { total: totalPowerDe(nP, nB, nG), nP, nB, nG, novos };
+  };
+  const aplicar = (alts, r) => {
+    alts.forEach((a, j) => { layout[a.i].shelves = a.shelves; st[a.i] = r.novos[j]; });
+    P = r.nP; B = r.nB; G = r.nG;
+  };
+  const melhora = r => r.total > totalPowerDe(P, B, G) * (1 + EPS_REL);
+  const acabouTempo = () => Date.now() - inicio > limiteMs;
+  const trocaNaPrateleira = (i, s, novaPrateleira) =>
+    layout[i].shelves.map((sh, si) => si === s ? novaPrateleira : sh);
+
+  let mudou = true;
+  let rodadas = 0;
+  while (mudou && rodadas++ < 60 && !acabouTempo()){
+    mudou = false;
+    recalcular();
+
+    // (a) troca um miner colocado por um que sobrou (mesmo tamanho de slot)
+    for (let i = 0; i < layout.length && !acabouTempo(); i++){
+      for (let s = 0; s < layout[i].shelves.length; s++){
+        for (let k = 0; k < layout[i].shelves[s].length; k++){
+          const m = layout[i].shelves[s][k];
+          const cls = classeSlots(m);
+          for (let f = 0; f < livres.length; f++){
+            const u = livres[f];
+            if (classeSlots(u) !== cls) continue;
+            const nova = layout[i].shelves[s].map((x, xi) => xi === k ? u : x);
+            const alts = [{ i, shelves: trocaNaPrateleira(i, s, nova) }];
+            const r = avaliar(alts);
+            if (melhora(r)){ aplicar(alts, r); livres[f] = m; mudou = true; break; }
+          }
+        }
+      }
+    }
+
+    // (b) troca dois miners de mesmo tamanho de slot entre racks diferentes
+    for (let i = 0; i < layout.length && !acabouTempo(); i++){
+      for (let j = i + 1; j < layout.length; j++){
+        for (let s1 = 0; s1 < layout[i].shelves.length; s1++){
+          for (let k1 = 0; k1 < layout[i].shelves[s1].length; k1++){
+            for (let s2 = 0; s2 < layout[j].shelves.length; s2++){
+              for (let k2 = 0; k2 < layout[j].shelves[s2].length; k2++){
+                const a = layout[i].shelves[s1][k1];
+                const b = layout[j].shelves[s2][k2];
+                if (classeSlots(a) !== classeSlots(b)) continue;
+                const alts = [
+                  { i, shelves: trocaNaPrateleira(i, s1, layout[i].shelves[s1].map((x, xi) => xi === k1 ? b : x)) },
+                  { i: j, shelves: trocaNaPrateleira(j, s2, layout[j].shelves[s2].map((x, xi) => xi === k2 ? a : x)) },
+                ];
+                const r = avaliar(alts);
+                if (melhora(r)){ aplicar(alts, r); mudou = true; }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // (e) troca prateleiras inteiras entre racks diferentes
+    for (let i = 0; i < layout.length && !acabouTempo(); i++){
+      for (let j = i + 1; j < layout.length; j++){
+        for (let s1 = 0; s1 < layout[i].shelves.length; s1++){
+          for (let s2 = 0; s2 < layout[j].shelves.length; s2++){
+            const alts = [
+              { i, shelves: trocaNaPrateleira(i, s1, layout[j].shelves[s2]) },
+              { i: j, shelves: trocaNaPrateleira(j, s2, layout[i].shelves[s1]) },
+            ];
+            const r = avaliar(alts);
+            if (melhora(r)){ aplicar(alts, r); mudou = true; }
+          }
+        }
+      }
+    }
+
+    // (d) troca os dois miners de uma prateleira de pares por outros dois que sobraram
+    //     (candidatos: os 20 de maior poder e os 20 de maior bônus entre os que sobraram)
+    {
+      const simplesLivres = livres.filter(m => classeSlots(m) === 1);
+      const porPoder = [...simplesLivres].sort((x, y) => poder(y) - poder(x)).slice(0, 20);
+      const porBonus = [...simplesLivres].sort((x, y) => (Number(y.bonus) || 0) - (Number(x.bonus) || 0)).slice(0, 20);
+      const candidatos = [...new Set([...porPoder, ...porBonus])];
+      for (let i = 0; i < layout.length && !acabouTempo(); i++){
+        for (let s = 0; s < layout[i].shelves.length; s++){
+          const sh = layout[i].shelves[s];
+          if (sh.length !== 2) continue;
+          let feito = false;
+          for (let x = 0; x < candidatos.length && !feito; x++){
+            for (let y = x + 1; y < candidatos.length && !feito; y++){
+              if (livres.indexOf(candidatos[x]) === -1 || livres.indexOf(candidatos[y]) === -1) continue;
+              const alts = [{ i, shelves: trocaNaPrateleira(i, s, [candidatos[x], candidatos[y]]) }];
+              const r = avaliar(alts);
+              if (melhora(r)){
+                aplicar(alts, r);
+                livres = livres.filter(m => m !== candidatos[x] && m !== candidatos[y]);
+                livres.push(sh[0], sh[1]);
+                mudou = true;
+                feito = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // (c) troca o formato da prateleira: par de 1 slot <-> miner de 2 slots que sobrou (e vice-versa)
+    for (let i = 0; i < layout.length && !acabouTempo(); i++){
+      for (let s = 0; s < layout[i].shelves.length; s++){
+        const sh = layout[i].shelves[s];
+        if (sh.length === 2){
+          for (let f = 0; f < livres.length; f++){
+            const u = livres[f];
+            if (classeSlots(u) !== 2) continue;
+            const alts = [{ i, shelves: trocaNaPrateleira(i, s, [u]) }];
+            const r = avaliar(alts);
+            if (melhora(r)){
+              aplicar(alts, r);
+              livres.splice(f, 1);
+              livres.push(sh[0], sh[1]);
+              mudou = true;
+              break;
+            }
+          }
+        } else if (classeSlots(sh[0]) === 2){
+          const simplesLivres = livres.filter(m => classeSlots(m) === 1);
+          const porPoder = [...simplesLivres].sort((x, y) => poder(y) - poder(x)).slice(0, 20);
+          const porBonus = [...simplesLivres].sort((x, y) => (Number(y.bonus) || 0) - (Number(x.bonus) || 0)).slice(0, 20);
+          const candidatos = [...new Set([...porPoder, ...porBonus])];
+          let feito = false;
+          for (let x = 0; x < candidatos.length && !feito; x++){
+            for (let y = x + 1; y < candidatos.length && !feito; y++){
+              const alts = [{ i, shelves: trocaNaPrateleira(i, s, [candidatos[x], candidatos[y]]) }];
+              const r = avaliar(alts);
+              if (melhora(r)){
+                aplicar(alts, r);
+                livres = livres.filter(m => m !== candidatos[x] && m !== candidatos[y]);
+                livres.push(sh[0]);
+                mudou = true;
+                feito = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  recalcular();
+  return { layout, livres, tempoMs: Date.now() - inicio };
+}
+
+// Distribuição final: método dos passos 01 a 05 + reavaliação (6) + trocas (7). Devolve o mesmo
+// formato de antes, mais "etapas" (Total Power depois de cada fase) pra você conferir o ganho.
+function distribuirMinersNaSala(racksSala, poolMiners){
+  const cachePoder = new Map();
+  const poder = m => {
+    let v = cachePoder.get(m.id);
+    if (v === undefined){ v = poderHsAtual(m); cachePoder.set(m.id, v); }
+    return v;
+  };
+
+  // passos 01 a 05
+  const inicial = distribuirMinersGuloso(racksSala, poolMiners);
+  const layoutInicial = layoutDeResultado(inicial.porRack);
+  const somInicial = somasDoLayout(layoutInicial, poder);
+  const etapas = [{ nome: 'Passos 01 a 05 (método inicial)', total: somInicial.total }];
+
+  // passo 6 — reavaliação com poder e bônus finais estimados
+  const duplos = poolMiners.filter(m => slotsDoMiner(m) >= 2).map(m => criarUnidadePrateleira([m]));
+  const simples = [...poolMiners.filter(m => slotsDoMiner(m) < 2)].sort(compararMinersPorPoder);
+  const { tabelaParesPorPoder } = montarTabelasDePares(simples);
+  const unidades = [...tabelaParesPorPoder, ...duplos];
+
+  let melhorLayout = layoutInicial;
+  let melhorSom = somInicial;
+  let estP = somInicial.P;
+  let estB = somInicial.B;
+  for (let it = 0; it < 8; it++){
+    const cand = reconstruirComEstimativa(racksSala, unidades, simples, estP, estB);
+    const s = somasDoLayout(cand, poder);
+    if (s.total > melhorSom.total * (1 + EPS_REL)){ melhorLayout = cand; melhorSom = s; }
+    const parou = Math.abs(s.P - estP) <= 1e-9 * Math.max(estP, 1) && Math.abs(s.B - estB) < 1e-9;
+    estP = s.P;
+    estB = s.B;
+    if (parou) break;
+  }
+  etapas.push({ nome: 'Reavaliação com poder e bônus finais estimados', total: melhorSom.total });
+
+  // passo 7 — trocas com o Total Power real como juiz, a partir de vários pontos de partida (a melhor
+  // sala da reavaliação, o método inicial e reavaliações com o poder estimado pela metade e em dobro),
+  // ficando com o melhor resultado final
+  const clonar = lay => lay.map(rk => ({ ...rk, shelves: rk.shelves.slice() }));
+  const partidas = [melhorLayout];
+  if (melhorLayout !== layoutInicial) partidas.push(layoutInicial);
+  [0.5, 2].forEach(fator => {
+    partidas.push(reconstruirComEstimativa(racksSala, unidades, simples, melhorSom.P * fator, melhorSom.B * fator));
+  });
+  let ref = null;
+  let somFinal = null;
+  partidas.forEach(part => {
+    const r = melhorarPorTrocas(clonar(part), poolMiners, poder, TEMPO_MAX_REFINO_MS / partidas.length);
+    const sm = somasDoLayout(r.layout, poder);
+    if (!somFinal || sm.total > somFinal.total){ ref = r; somFinal = sm; }
+  });
+  etapas.push({ nome: 'Após trocas entre miners, racks e prateleiras', total: somFinal.total });
+
+  // converte de volta pro formato usado na tela (slots por rack)
+  const colocados = new Set();
+  const porRack = ref.layout.map(rk => {
+    const combo = rk.shelves.flat();
+    if (!combo.length) return { rack: rk.rack, insuficiente: true };
+    combo.forEach(m => colocados.add(m.id));
+    const capacidade = rk.rack.slots || 4;
+    const slots = new Array(capacidade).fill(null);
+    rk.shelves.forEach((sh, idx) => {
+      const pos = idx * 2;
+      if (sh.length === 2){
+        slots[pos] = sh[0];
+        if (pos + 1 < capacidade) slots[pos + 1] = sh[1];
+      } else if (slotsDoMiner(sh[0]) >= 2){
+        slots[pos] = sh[0];
+        if (pos + 1 < capacidade) slots[pos + 1] = sh[0];
+      } else {
+        slots[pos] = sh[0];
+      }
+    });
+    const poderTotal = combo.reduce((s, m) => s + poder(m), 0);
+    const ganhoRack = poderTotal * rk.pct / 100;
+    return {
+      rack: rk.rack,
+      resultado: {
+        combo,
+        slots,
+        poderTotal,
+        bonusRack: rk.pct,
+        ganhoRack,
+        poderRack: poderTotal + ganhoRack,
+        unidadeRef: unidadeReferencia(combo),
+        slotsUsados: rk.shelves.reduce((s, sh) => s + Math.min(2, sh.reduce((t, m) => t + slotsDoMiner(m), 0)), 0),
+      },
+    };
+  });
+
+  return {
+    porRack,
+    poderBase: somFinal.P,
+    ganhoRacks: somFinal.G,
+    colBonus: somFinal.B,
+    poolRestante: poolMiners.filter(m => !colocados.has(m.id)),
+    etapas,
+  };
+}
+
 function calcularMelhorRack(){
   const box = document.getElementById('resultado-calculo');
   box.innerHTML = `<div class="card"><div class="empty-state">Calculando a distribuição…</div></div>`;
@@ -4285,7 +4658,7 @@ async function executarCalculoMelhorRack(){
   const poolParaRacks = myMiners.filter(m => m.usar_rack !== false && m.ativo !== false).sort(compararMinersPorPoder);
 
   // PASSOS 02 a 05 — ver distribuirMinersNaSala
-  const { porRack, poderBase: poderTotalGeral, ganhoRacks: ganhoRacksGeral, colBonus: colBonusGlobal, poolRestante } =
+  const { porRack, poderBase: poderTotalGeral, ganhoRacks: ganhoRacksGeral, colBonus: colBonusGlobal, poolRestante, etapas } =
     distribuirMinersNaSala(racksAtivos, poolParaRacks);
 
   const valorFinalGeral = (poderTotalGeral + GAMES_POWER) * (1 + colBonusGlobal / 100) + ganhoRacksGeral + TEMPORARY_BOOST;
@@ -4352,6 +4725,18 @@ async function executarCalculoMelhorRack(){
     </div>
   `;
 
+  const resumoEtapas = `
+    <div class="card">
+      <div class="section-title">Como o resultado foi refinado (Total Power)</div>
+      ${etapas.map(e => `
+        <div class="alt-item">
+          <div class="names">${escapeHtml(e.nome)}</div>
+          <div class="score">${formatarPoder(e.total)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
   const resumoPrioridade = `
     <div class="card">
       <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
@@ -4372,7 +4757,7 @@ async function executarCalculoMelhorRack(){
     ? ` · ${fmtValorCompleto(rack.valor)} ${rack.moeda || 'RLT'}`
     : '';
 
-  box.innerHTML = resumoGeral + resumoPrioridade + resultadosPorRack.map((item, indiceRack) => {
+  box.innerHTML = resumoGeral + resumoEtapas + resumoPrioridade + resultadosPorRack.map((item, indiceRack) => {
     // distribui os racks em salas de 12: os primeiros 12 (por prioridade) vão pra Sala 1,
     // os próximos 12 pra Sala 2, e assim por diante
     const numeroSala = Math.floor(indiceRack / RACKS_POR_SALA) + 1;
