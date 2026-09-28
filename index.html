@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v89';
+const APP_VERSION = 'v90';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4538,7 +4538,12 @@ function distribuirMinersNaSala(racksSala, poolMiners){
 
   // converte de volta pro formato usado na tela (slots por rack)
   const colocados = new Set();
-  const porRack = ref.layout.map(rk => {
+  const porRack = ref.layout.map(rk0 => {
+    // dentro do rack a ordem das prateleiras não muda o Total Power, então mostra a mais forte primeiro
+    // (maior poder da prateleira; empate: maior bônus)
+    const somaPoderPrat = sh => sh.reduce((t, m) => t + poder(m), 0);
+    const somaBonusPrat = sh => sh.reduce((t, m) => t + (Number(m.bonus) || 0), 0);
+    const rk = { ...rk0, shelves: [...rk0.shelves].sort((a, b) => (somaPoderPrat(b) - somaPoderPrat(a)) || (somaBonusPrat(b) - somaBonusPrat(a))) };
     const combo = rk.shelves.flat();
     if (!combo.length) return { rack: rk.rack, insuficiente: true };
     combo.forEach(m => colocados.add(m.id));
