@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v90';
+const APP_VERSION = 'v91';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4481,6 +4481,57 @@ function melhorarPorTrocas(layout, pool, poder, limiteMs){
   return { layout, livres, tempoMs: Date.now() - inicio };
 }
 
+// PASSO 8 — só pra EXIBIÇÃO: entre racks de MESMO bônus, tenta colocar as prateleiras mais fortes nos
+// racks que vêm primeiro na ordem de prioridade. CUIDADO: juntar dois miners de mesmo nome e nível num
+// rack que antes não tinha os dois pode fazer um deles perder o bônus (regra do mesmo rack), então todo
+// grupo só é reorganizado se o Total Power da sala continuar EXATAMENTE igual depois da troca; senão,
+// fica como estava.
+function igualarEntreRacksMesmoBonus(layout, poder){
+  const poderPrat = sh => sh.reduce((s, m) => s + poder(m), 0);
+  const bonusPrat = sh => sh.reduce((s, m) => s + (Number(m.bonus) || 0), 0);
+  const totalGrupo = idxs => {
+    let P = 0, B = 0, G = 0;
+    idxs.forEach(i => {
+      const e = estatisticasPrateleiras(layout[i].shelves, layout[i].pct, poder);
+      P += e.p; B += e.b; G += e.g;
+    });
+    return { P, B, G };
+  };
+  const grupos = new Map(); // % de bônus -> índices dos racks, na ordem de prioridade (já é a ordem do layout)
+  layout.forEach((rk, i) => {
+    const chave = Math.round((rk.pct || 0) * 1000);
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(i);
+  });
+  const novoLayout = layout.map(rk => ({ ...rk, shelves: rk.shelves.slice() }));
+  grupos.forEach(idxs => {
+    if (idxs.length < 2) return;
+    const antes = totalGrupo(idxs);
+    const pool = [];
+    idxs.forEach(i => pool.push(...layout[i].shelves));
+    pool.sort((a, b) => (poderPrat(b) - poderPrat(a)) || (bonusPrat(b) - bonusPrat(a)));
+    const tentativa = idxs.map(() => []);
+    let p = 0;
+    idxs.forEach((i, pos) => {
+      const qtd = layout[i].shelves.length; // mesma quantidade de prateleiras que o rack já tinha
+      tentativa[pos] = pool.slice(p, p + qtd);
+      p += qtd;
+    });
+    const layoutTentativa = idxs.map((i, pos) => ({ pct: layout[i].pct, shelves: tentativa[pos] }));
+    let P = 0, B = 0, G = 0;
+    layoutTentativa.forEach(rk => {
+      const e = estatisticasPrateleiras(rk.shelves, rk.pct, poder);
+      P += e.p; B += e.b; G += e.g;
+    });
+    // só aplica se o Total Power da sala não mudar nada (confirma que nenhum tipo colidiu num rack novo)
+    const igual = Math.abs(P - antes.P) < 1e-6 && Math.abs(B - antes.B) < 1e-9 && Math.abs(G - antes.G) < 1e-6;
+    if (igual){
+      idxs.forEach((i, pos) => { novoLayout[i].shelves = tentativa[pos]; });
+    }
+  });
+  return novoLayout;
+}
+
 // Distribuição final: método dos passos 01 a 05 + reavaliação (6) + trocas (7). Devolve o mesmo
 // formato de antes, mais "etapas" (Total Power depois de cada fase) pra você conferir o ganho.
 function distribuirMinersNaSala(racksSala, poolMiners){
@@ -4536,9 +4587,12 @@ function distribuirMinersNaSala(racksSala, poolMiners){
   });
   etapas.push({ nome: 'Após trocas entre miners, racks e prateleiras', total: somFinal.total });
 
+  // passo 8 — entre racks de mesmo bônus, mostra as prateleiras mais fortes nos que vêm primeiro
+  const layoutFinal = igualarEntreRacksMesmoBonus(ref.layout, poder);
+
   // converte de volta pro formato usado na tela (slots por rack)
   const colocados = new Set();
-  const porRack = ref.layout.map(rk0 => {
+  const porRack = layoutFinal.map(rk0 => {
     // dentro do rack a ordem das prateleiras não muda o Total Power, então mostra a mais forte primeiro
     // (maior poder da prateleira; empate: maior bônus)
     const somaPoderPrat = sh => sh.reduce((t, m) => t + poder(m), 0);
