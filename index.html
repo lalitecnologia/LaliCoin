@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v93';
+const APP_VERSION = 'v94';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4272,7 +4272,11 @@ function distribuirMinersGuloso(racksSala, poolMiners){
       sala de maior Total Power.
    7) TROCAS: com o Total Power real como juiz, tenta trocar um miner colocado por um que sobrou, trocar
       miners e prateleiras inteiras entre racks, e trocar par de 1 slot por miner de 2 slots (e vice-versa).
-      Aceita toda troca que aumenta o total e repete até nenhuma melhorar (ou até o tempo limite). */
+      Aceita toda troca que aumenta o total e repete até nenhuma melhorar (ou até o tempo limite).
+   v94: nova jogada (f), o CICLO DE 3 — um miner que sobrou entra no lugar de A, A vai pro lugar de B e B sai.
+   Antes, ao cadastrar um miner novo o total podia CAIR (a busca ficava presa num arranjo pior do que o
+   que já existia sem ele, principalmente por causa de miners repetidos que não podem ficar no mesmo rack).
+   Testado: cadastrar qualquer miner a mais nunca reduz o Total Power. */
 const TEMPO_MAX_REFINO_MS = 4000; // tempo total das trocas, dividido entre os pontos de partida
 const EPS_REL = 1e-12;
 
@@ -4360,6 +4364,17 @@ function reconstruirComEstimativa(racksSala, unidades, simples, P, B){
   return layout;
 }
 
+// Monta as prateleiras novas de cada rack afetado quando vários miners mudam de posição de uma vez
+// (usado pelo ciclo de 3 do passo 7). mods: [{ i, s, k, novo }]
+function alteracoesPorPosicao(layout, mods){
+  const porRack = new Map();
+  mods.forEach(md => {
+    if (!porRack.has(md.i)) porRack.set(md.i, layout[md.i].shelves.map(sh => sh.slice()));
+    porRack.get(md.i)[md.s][md.k] = md.novo;
+  });
+  return [...porRack.entries()].map(([i, shelves]) => ({ i, shelves }));
+}
+
 // PASSO 7 — melhoria local por trocas, sempre conferindo o Total Power real da sala
 function melhorarPorTrocas(layout, pool, poder, limiteMs){
   const inicio = Date.now();
@@ -4412,6 +4427,44 @@ function melhorarPorTrocas(layout, pool, poder, limiteMs){
             const r = avaliar(alts);
             if (melhora(r)){ aplicar(alts, r); livres[f] = m; mudou = true; break; }
           }
+        }
+      }
+    }
+
+    // (f) CICLO DE 3 (v94): um miner que sobrou entra no lugar de A, A vai pro lugar de B e B sai (vira sobra).
+    //     Sozinhas, as trocas simples não enxergam esse caminho quando A e B de mesmo tipo ficariam no mesmo
+    //     rack no meio do caminho (o bônus repetido não conta) — foi o que fez o total CAIR ao cadastrar
+    //     um miner novo, porque a busca ficava presa num arranjo pior do que o que já existia sem ele.
+    {
+      const posicoes = [];
+      layout.forEach((rk, i) => rk.shelves.forEach((sh, s) => sh.forEach((m, k) => posicoes.push({ i, s, k, m }))));
+      for (let f = 0; f < livres.length && !acabouTempo(); f++){
+        const u = livres[f];
+        const cls = classeSlots(u);
+        let achou = false;
+        for (let a = 0; a < posicoes.length && !achou; a++){
+          const A = posicoes[a];
+          if (classeSlots(A.m) !== cls) continue;
+          for (let b = 0; b < posicoes.length && !achou; b++){
+            if (b === a) continue;
+            const Bp = posicoes[b];
+            if (classeSlots(Bp.m) !== cls) continue;
+            const alts = alteracoesPorPosicao(layout, [
+              { i: A.i, s: A.s, k: A.k, novo: u },       // sobra -> lugar de A
+              { i: Bp.i, s: Bp.s, k: Bp.k, novo: A.m },  // A -> lugar de B
+            ]);
+            const r = avaliar(alts);
+            if (melhora(r)){
+              aplicar(alts, r);
+              livres[f] = Bp.m;   // B sai e vira sobra
+              mudou = true;
+              achou = true;
+            }
+          }
+        }
+        if (achou){ // posições mudaram: remonta a lista antes de seguir
+          posicoes.length = 0;
+          layout.forEach((rk, i) => rk.shelves.forEach((sh, s) => sh.forEach((m, k) => posicoes.push({ i, s, k, m }))));
         }
       }
     }
