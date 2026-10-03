@@ -893,8 +893,8 @@
         <p style="font-size:13px; color:var(--muted); line-height:1.5;">
           Total Power = (Poder dos miners + Games) × (1 + Collection Bonus) + Rack Bonus + Temporary.
           Este app ainda não cadastra Games nem Temporary, então essas parcelas entram como 0. O
-          Collection Bonus é a soma do bônus dos mineradores da sala; dois mineradores de mesmo
-          nome e nível só não somam o bônus quando estão no mesmo rack (em racks diferentes, somam). <b>Como o cálculo funciona:</b> (1) só racks ativos, do maior
+          Collection Bonus é a soma do bônus dos mineradores da sala; por padrão (v95), dois mineradores de mesmo
+          nome e nível somam o bônus uma vez só na sala inteira — dá pra voltar à regra "uma vez por rack" no seletor acima. <b>Como o cálculo funciona:</b> (1) só racks ativos, do maior
           bônus pro menor — empate: mais slots, depois nome — no máximo 12 por sala; (2) monta todas as
           combinações de 2 mineradores de 1 slot (soma poder e bônus; mesmo nome e nível na mesma
           prateleira não soma o bônus de novo); (3) o par ou minerador de 2 slots de maior poder vai pro primeiro rack; (4) a
@@ -904,6 +904,16 @@
           estimados da sala (o bônus vale mais quando há muito poder); (7) tenta trocas entre mineradores,
           racks e prateleiras, aceitando toda troca que aumenta o Total Power.
         </p>
+      </div>
+
+      <div class="card" style="padding:12px 16px;">
+        <div class="field" style="margin:0;">
+          <label for="select-escopo-bonus">Bônus de miners repetidos (mesmo nome e nível)</label>
+          <select id="select-escopo-bonus" onchange="mudarEscopoBonus(this.value)">
+            <option value="sala">Conta uma vez só na sala inteira (padrão desde a v95)</option>
+            <option value="rack">Conta uma vez por rack (regra da v94 e anteriores)</option>
+          </select>
+        </div>
       </div>
 
       <div id="resultado-calculo"></div>
@@ -1175,7 +1185,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v94';
+const APP_VERSION = 'v95';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2759,6 +2769,8 @@ function switchScreen(name){
     // busca miners e racks direto do banco antes de calcular, pra nunca ficar com dados
     // desatualizados (ex: um cadastro feito e ido direto pra essa aba, sem passar por outra tela)
     document.getElementById('resultado-calculo').innerHTML = '<div class="card"><div class="empty-state">Carregando dados atualizados...</div></div>';
+    const selEscopo = document.getElementById('select-escopo-bonus');
+    if (selEscopo) selEscopo.value = ESCOPO_BONUS_REPETIDO;
     (async () => {
       await loadMiners();
       await loadRacks();
@@ -4065,11 +4077,25 @@ function calcularMelhorRackIndice(){
 
    Total Power = (Poder dos miners + Games) x (1 + soma dos bônus dos miners da sala)
                  + Rack Bonus + Temporary.
-   Regra do RollerCoin: o bônus de dois miners de mesmo nome e nível só deixa de contar quando eles
-   estão no MESMO rack; em racks diferentes cada um soma o seu bônus normalmente. */
+   Regra dos repetidos (v95): por padrão o bônus de um tipo (nome+nível) conta uma vez só na sala inteira;
+   o modo antigo (uma vez por rack) continua disponível no seletor da aba Cálculo. */
 const GAMES_POWER = 0;      // não cadastrado no app ainda
 const TEMPORARY_BOOST = 0;  // não cadastrado no app ainda
 const MAX_RACKS_POR_SALA = 12;
+
+// v95 — ESCOPO DO BÔNUS DE MINERS REPETIDOS (mesmo nome e nível):
+//   'sala' = o bônus de um tipo conta UMA vez só na sala inteira, não importa em quantos racks ele esteja
+//   'rack' = conta uma vez por rack (regra usada até a v94)
+// Motivo da mudança: o jogo não creditou o bônus da 2ª cópia de um miner em outro rack (o app creditava),
+// e por isso o app mandava trocar um miner por outro "melhor" que na prática fazia o Total Power cair.
+let ESCOPO_BONUS_REPETIDO = 'sala';
+try { const salvo = localStorage.getItem('lalicoin_escopo_bonus'); if (salvo === 'rack' || salvo === 'sala') ESCOPO_BONUS_REPETIDO = salvo; } catch (e) {}
+const escopoSala = () => ESCOPO_BONUS_REPETIDO === 'sala';
+function mudarEscopoBonus(valor){
+  ESCOPO_BONUS_REPETIDO = valor === 'rack' ? 'rack' : 'sala';
+  try { localStorage.setItem('lalicoin_escopo_bonus', ESCOPO_BONUS_REPETIDO); } catch (e) {}
+  calcularMelhorRack();
+}
 
 // Quantos slots o miner ocupa (1 se o cadastro não informar)
 function slotsDoMiner(m){
@@ -4176,7 +4202,7 @@ function distribuirMinersGuloso(racksSala, poolMiners){
   let primeiraColocacao = true;
   for (const est of estados){
     const bonusRackPct = Number(est.rack.bonus) || 0;
-    tiposNoRack = new Set(); // rack novo: mesmo nome e nível voltam a somar o bônus
+    if (!escopoSala()) tiposNoRack = new Set(); // modo 'rack': rack novo, mesmo nome e nível voltam a somar o bônus
     // o catálogo só aceita racks de 6 ou 8 slots; cada prateleira tem 2 slots
     const numPrateleiras = Math.floor(est.capacidade / 2);
 
@@ -4302,9 +4328,15 @@ function totalPowerDe(P, B, G){
 
 function somasDoLayout(layout, poder){
   let P = 0, B = 0, G = 0;
+  const tiposSala = new Set();
   layout.forEach(rk => {
     const e = estatisticasPrateleiras(rk.shelves, rk.pct, poder);
-    P += e.p; B += e.b; G += e.g;
+    P += e.p; G += e.g;
+    if (!escopoSala()){ B += e.b; return; }
+    rk.shelves.forEach(sh => sh.forEach(m => {
+      const k = chaveMiner(m.nome, m.nivel);
+      if (!tiposSala.has(k)){ tiposSala.add(k); B += Number(m.bonus) || 0; }
+    }));
   });
   return { P, B, G, total: totalPowerDe(P, B, G) };
 }
@@ -4335,9 +4367,10 @@ function reconstruirComEstimativa(racksSala, unidades, simples, P, B){
   const usados = new Set();
   let restantes = unidades;
   const layout = racksSala.map(rack => ({ rack, pct: Number(rack.bonus) || 0, shelves: [] }));
+  const tiposSala = new Set();
   for (const rk of layout){
     const numPrat = Math.floor((rk.rack.slots || 4) / 2);
-    const tiposRack = new Set();
+    const tiposRack = escopoSala() ? tiposSala : new Set();
     for (let p = 0; p < numPrat; p++){
       let melhor = null;
       let melhorValor = -Infinity;
@@ -4383,9 +4416,44 @@ function melhorarPorTrocas(layout, pool, poder, limiteMs){
   let livres = pool.filter(m => !usados.has(m.id));
   const st = layout.map(rk => estatisticasPrateleiras(rk.shelves, rk.pct, poder));
   let P = 0, B = 0, G = 0;
+
+  // modo 'sala' (v95): o bônus de cada tipo conta uma vez só na sala inteira. Guarda quantas cópias de cada
+  // tipo estão nos racks; o bônus da sala é a soma dos tipos com pelo menos 1 cópia.
+  const sala = escopoSala();
+  const contagem = new Map();
+  const bonusDoTipo = new Map();
+  pool.forEach(m => bonusDoTipo.set(chaveMiner(m.nome, m.nivel), Number(m.bonus) || 0));
+  const somaTipos = () => { let b = 0; contagem.forEach((n, k) => { if (n > 0) b += bonusDoTipo.get(k) || 0; }); return b; };
+  const refazContagem = () => {
+    contagem.clear();
+    layout.forEach(rk => rk.shelves.forEach(sh => sh.forEach(m => {
+      const k = chaveMiner(m.nome, m.nivel);
+      contagem.set(k, (contagem.get(k) || 0) + 1);
+    })));
+  };
+  // variação do bônus da sala se os racks afetados passarem do conteúdo atual para o das alternativas
+  const deltaBonusSala = alts => {
+    const d = new Map();
+    alts.forEach(a => {
+      layout[a.i].shelves.forEach(sh => sh.forEach(m => { const k = chaveMiner(m.nome, m.nivel); d.set(k, (d.get(k) || 0) - 1); }));
+      a.shelves.forEach(sh => sh.forEach(m => { const k = chaveMiner(m.nome, m.nivel); d.set(k, (d.get(k) || 0) + 1); }));
+    });
+    let delta = 0;
+    d.forEach((v, k) => {
+      if (!v) return;
+      const antes = contagem.get(k) || 0;
+      const depois = antes + v;
+      const b = bonusDoTipo.get(k) || 0;
+      if (antes > 0 && depois <= 0) delta -= b;
+      else if (antes <= 0 && depois > 0) delta += b;
+    });
+    return delta;
+  };
+
   const recalcular = () => {
     P = 0; B = 0; G = 0;
     st.forEach(e => { P += e.p; B += e.b; G += e.g; });
+    if (sala){ refazContagem(); B = somaTipos(); }
   };
   recalcular();
 
@@ -4393,12 +4461,20 @@ function melhorarPorTrocas(layout, pool, poder, limiteMs){
     let nP = P, nB = B, nG = G;
     const novos = alts.map(a => {
       const n = estatisticasPrateleiras(a.shelves, layout[a.i].pct, poder);
-      nP += n.p - st[a.i].p; nB += n.b - st[a.i].b; nG += n.g - st[a.i].g;
+      nP += n.p - st[a.i].p; nG += n.g - st[a.i].g;
+      if (!sala) nB += n.b - st[a.i].b;
       return n;
     });
+    if (sala) nB = B + deltaBonusSala(alts);
     return { total: totalPowerDe(nP, nB, nG), nP, nB, nG, novos };
   };
   const aplicar = (alts, r) => {
+    if (sala){
+      alts.forEach(a => {
+        layout[a.i].shelves.forEach(sh => sh.forEach(m => { const k = chaveMiner(m.nome, m.nivel); contagem.set(k, (contagem.get(k) || 0) - 1); }));
+        a.shelves.forEach(sh => sh.forEach(m => { const k = chaveMiner(m.nome, m.nivel); contagem.set(k, (contagem.get(k) || 0) + 1); }));
+      });
+    }
     alts.forEach((a, j) => { layout[a.i].shelves = a.shelves; st[a.i] = r.novos[j]; });
     P = r.nP; B = r.nB; G = r.nG;
   };
@@ -4630,7 +4706,7 @@ function igualarEntreRacksMesmoBonus(layout, poder){
               novoLayout[ia].shelves = novaA;
               novoLayout[ib].shelves = novaB;
               const depois = somaGrupo(idxs);
-              const igual = Math.abs(depois.P - antes.P) < 1e-6 && Math.abs(depois.B - antes.B) < 1e-9 && Math.abs(depois.G - antes.G) < 1e-6;
+              const igual = Math.abs(depois.P - antes.P) < 1e-6 && (escopoSala() || Math.abs(depois.B - antes.B) < 1e-9) && Math.abs(depois.G - antes.G) < 1e-6;
               if (igual){
                 mudou = true;
                 break busca; // reinicia a varredura do grupo do zero com o novo estado
