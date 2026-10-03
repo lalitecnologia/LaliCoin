@@ -617,7 +617,7 @@
             <label>Foto do minerador</label>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
               <img id="cat-miner-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-miner-foto-preview', 'cat-miner-foto-data')">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-miner-foto-preview', 'cat-miner-foto-data', 'cat-miner-nome', 'cat-miner-nivel', 'miner')">
             </div>
             <input type="hidden" id="cat-miner-foto-data">
           </div>
@@ -696,7 +696,7 @@
             <label>Foto do rack</label>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
               <img id="cat-rack-foto-preview" src="" alt="" class="miner-thumb" style="display:none;">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-rack-foto-preview', 'cat-rack-foto-data')">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'cat-rack-foto-preview', 'cat-rack-foto-data', 'cat-rack-nome', 'cat-rack-slots', 'rack')">
             </div>
             <input type="hidden" id="cat-rack-foto-data">
           </div>
@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v91';
+const APP_VERSION = 'v93';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -1347,7 +1347,38 @@ function redimensionarImagem(file, maxLargura, maxAltura, qualidade){
   });
 }
 
-async function handleFotoMiner(event, idPreview, idCampoOculto){
+// Tira a extensão do nome do arquivo (".png", ".jpg" etc, qualquer extensão)
+function nomeArquivoSemExtensao(nomeArquivo){
+  return (nomeArquivo || '').replace(/\.[^/.\\]+$/, '').trim();
+}
+
+// "Royal Necklace III.png" -> { nome: "Royal Necklace", nivel: "III" }. Só separa o nível se a
+// última palavra do nome do arquivo for exatamente um numeral romano de I a X; senão, o nome do
+// arquivo inteiro (sem extensão) vira o nome e o nível fica null (campo não é alterado).
+function extrairNomeENivelDoArquivo(nomeArquivo){
+  const base = nomeArquivoSemExtensao(nomeArquivo);
+  const partes = base.split(/\s+/).filter(Boolean);
+  const ultima = partes[partes.length - 1] || '';
+  const nivel = NIVEIS_ROMANOS.find(n => n.toLowerCase() === ultima.toLowerCase());
+  if (nivel && partes.length > 1) return { nome: partes.slice(0, -1).join(' '), nivel };
+  return { nome: base, nivel: null };
+}
+
+// "Regular Rack 6.png" -> { nome: "Regular Rack", slots: 6 }. Só separa os slots se a última
+// palavra do nome do arquivo for só números; senão, o nome do arquivo inteiro vira o nome e os
+// slots ficam null (campo não é alterado).
+function extrairNomeESlotsDoArquivo(nomeArquivo){
+  const base = nomeArquivoSemExtensao(nomeArquivo);
+  const partes = base.split(/\s+/).filter(Boolean);
+  const ultima = partes[partes.length - 1] || '';
+  if (/^\d+$/.test(ultima) && partes.length > 1) return { nome: partes.slice(0, -1).join(' '), slots: Number(ultima) };
+  return { nome: base, slots: null };
+}
+
+// idNomeCampo/idNivelOuSlotsCampo e tipo ('miner' ou 'rack') são opcionais — quando informados,
+// tenta extrair nome e nível (miner) ou nome e quantidade de slots (rack) do nome do arquivo
+// escolhido e preenche os campos correspondentes automaticamente.
+async function handleFotoMiner(event, idPreview, idCampoOculto, idNomeCampo, idNivelOuSlotsCampo, tipo){
   const file = event.target.files[0];
   if (!file) return;
   try {
@@ -1358,6 +1389,25 @@ async function handleFotoMiner(event, idPreview, idCampoOculto){
     const preview = document.getElementById(idPreview);
     preview.src = dataUrl;
     preview.style.display = 'block';
+
+    if (idNomeCampo){
+      const campoNome = document.getElementById(idNomeCampo);
+      if (tipo === 'rack'){
+        const { nome, slots } = extrairNomeESlotsDoArquivo(file.name);
+        if (campoNome && nome) campoNome.value = nome;
+        if (slots && idNivelOuSlotsCampo){
+          const campoSlots = document.getElementById(idNivelOuSlotsCampo);
+          if (campoSlots && [...campoSlots.options].some(o => o.value === String(slots))) campoSlots.value = String(slots);
+        }
+      } else {
+        const { nome, nivel } = extrairNomeENivelDoArquivo(file.name);
+        if (campoNome && nome) campoNome.value = nome;
+        if (nivel && idNivelOuSlotsCampo){
+          const campoNivel = document.getElementById(idNivelOuSlotsCampo);
+          if (campoNivel) campoNivel.value = nivel;
+        }
+      }
+    }
   } catch (err){
     showToast('Não foi possível processar essa imagem.');
   }
@@ -2777,7 +2827,7 @@ function renderCatalogoMiners(){
             <label>Foto</label>
             <div style="display:flex; align-items:center; gap:10px;">
               <img id="edit-cat-miner-foto-preview-${c.id}" src="${c.foto || ''}" alt="" class="miner-thumb" style="display:${c.foto ? 'block' : 'none'};">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-cat-miner-foto-preview-${c.id}', 'edit-cat-miner-foto-data-${c.id}')">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-cat-miner-foto-preview-${c.id}', 'edit-cat-miner-foto-data-${c.id}', 'edit-cat-miner-nome-${c.id}', 'edit-cat-miner-nivel-${c.id}', 'miner')">
             </div>
             <input type="hidden" id="edit-cat-miner-foto-data-${c.id}" value="${c.foto || ''}">
           </div>
@@ -2983,7 +3033,7 @@ function renderCatalogoRacks(){
             <label>Foto</label>
             <div style="display:flex; align-items:center; gap:10px;">
               <img id="edit-cat-rack-foto-preview-${c.id}" src="${c.foto || ''}" alt="" class="miner-thumb" style="display:${c.foto ? 'block' : 'none'};">
-              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-cat-rack-foto-preview-${c.id}', 'edit-cat-rack-foto-data-${c.id}')">
+              <input type="file" accept="image/*" onchange="handleFotoMiner(event, 'edit-cat-rack-foto-preview-${c.id}', 'edit-cat-rack-foto-data-${c.id}', 'edit-cat-rack-nome-${c.id}', 'edit-cat-rack-slots-${c.id}', 'rack')">
             </div>
             <input type="hidden" id="edit-cat-rack-foto-data-${c.id}" value="${c.foto || ''}">
           </div>
@@ -4483,20 +4533,14 @@ function melhorarPorTrocas(layout, pool, poder, limiteMs){
 
 // PASSO 8 — só pra EXIBIÇÃO: entre racks de MESMO bônus, tenta colocar as prateleiras mais fortes nos
 // racks que vêm primeiro na ordem de prioridade. CUIDADO: juntar dois miners de mesmo nome e nível num
-// rack que antes não tinha os dois pode fazer um deles perder o bônus (regra do mesmo rack), então todo
-// grupo só é reorganizado se o Total Power da sala continuar EXATAMENTE igual depois da troca; senão,
-// fica como estava.
+// rack que antes não tinha os dois pode fazer um deles perder o bônus (regra do mesmo rack). Por isso,
+// em vez de reagrupar tudo de uma vez só (o que travava o grupo inteiro quando QUALQUER colisão aparecia
+// em algum lugar da divisão — era o caso do Santoku III ficando atrás por causa de outro par colidindo),
+// troca prateleiras DUAS a duas entre os racks do grupo: só aplica cada troca específica se o Total Power
+// da sala continuar EXATAMENTE igual com ela; se uma troca colidir, pula só aquela e tenta as outras, até
+// não achar mais nenhuma troca que melhore a ordem de exibição.
 function igualarEntreRacksMesmoBonus(layout, poder){
   const poderPrat = sh => sh.reduce((s, m) => s + poder(m), 0);
-  const bonusPrat = sh => sh.reduce((s, m) => s + (Number(m.bonus) || 0), 0);
-  const totalGrupo = idxs => {
-    let P = 0, B = 0, G = 0;
-    idxs.forEach(i => {
-      const e = estatisticasPrateleiras(layout[i].shelves, layout[i].pct, poder);
-      P += e.p; B += e.b; G += e.g;
-    });
-    return { P, B, G };
-  };
   const grupos = new Map(); // % de bônus -> índices dos racks, na ordem de prioridade (já é a ordem do layout)
   layout.forEach((rk, i) => {
     const chave = Math.round((rk.pct || 0) * 1000);
@@ -4504,29 +4548,46 @@ function igualarEntreRacksMesmoBonus(layout, poder){
     grupos.get(chave).push(i);
   });
   const novoLayout = layout.map(rk => ({ ...rk, shelves: rk.shelves.slice() }));
-  grupos.forEach(idxs => {
-    if (idxs.length < 2) return;
-    const antes = totalGrupo(idxs);
-    const pool = [];
-    idxs.forEach(i => pool.push(...layout[i].shelves));
-    pool.sort((a, b) => (poderPrat(b) - poderPrat(a)) || (bonusPrat(b) - bonusPrat(a)));
-    const tentativa = idxs.map(() => []);
-    let p = 0;
-    idxs.forEach((i, pos) => {
-      const qtd = layout[i].shelves.length; // mesma quantidade de prateleiras que o rack já tinha
-      tentativa[pos] = pool.slice(p, p + qtd);
-      p += qtd;
-    });
-    const layoutTentativa = idxs.map((i, pos) => ({ pct: layout[i].pct, shelves: tentativa[pos] }));
+  const somaGrupo = idxs => {
     let P = 0, B = 0, G = 0;
-    layoutTentativa.forEach(rk => {
-      const e = estatisticasPrateleiras(rk.shelves, rk.pct, poder);
+    idxs.forEach(i => {
+      const e = estatisticasPrateleiras(novoLayout[i].shelves, novoLayout[i].pct, poder);
       P += e.p; B += e.b; G += e.g;
     });
-    // só aplica se o Total Power da sala não mudar nada (confirma que nenhum tipo colidiu num rack novo)
-    const igual = Math.abs(P - antes.P) < 1e-6 && Math.abs(B - antes.B) < 1e-9 && Math.abs(G - antes.G) < 1e-6;
-    if (igual){
-      idxs.forEach((i, pos) => { novoLayout[i].shelves = tentativa[pos]; });
+    return { P, B, G };
+  };
+  grupos.forEach(idxs => {
+    if (idxs.length < 2) return;
+    let mudou = true;
+    let rodadas = 0;
+    while (mudou && rodadas++ < 30){
+      mudou = false;
+      busca:
+      for (let a = 0; a < idxs.length; a++){
+        for (let b = a + 1; b < idxs.length; b++){
+          const ia = idxs[a], ib = idxs[b]; // ia vem antes de ib na ordem de prioridade dos racks
+          const shA = novoLayout[ia].shelves, shB = novoLayout[ib].shelves;
+          for (let sa = 0; sa < shA.length; sa++){
+            for (let sb = 0; sb < shB.length; sb++){
+              const pa = poderPrat(shA[sa]), pb = poderPrat(shB[sb]);
+              if (pb <= pa) continue; // só vale a pena se a prateleira de B for mais forte que a de A
+              const antes = somaGrupo(idxs);
+              const novaA = shA.map((x, xi) => xi === sa ? shB[sb] : x);
+              const novaB = shB.map((x, xi) => xi === sb ? shA[sa] : x);
+              novoLayout[ia].shelves = novaA;
+              novoLayout[ib].shelves = novaB;
+              const depois = somaGrupo(idxs);
+              const igual = Math.abs(depois.P - antes.P) < 1e-6 && Math.abs(depois.B - antes.B) < 1e-9 && Math.abs(depois.G - antes.G) < 1e-6;
+              if (igual){
+                mudou = true;
+                break busca; // reinicia a varredura do grupo do zero com o novo estado
+              }
+              novoLayout[ia].shelves = shA; // colidiu (ex.: mesmo tipo nos dois racks) — desfaz e tenta outra
+              novoLayout[ib].shelves = shB;
+            }
+          }
+        }
+      }
     }
   });
   return novoLayout;
