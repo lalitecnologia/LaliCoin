@@ -906,15 +906,17 @@
         </p>
       </div>
 
-      <div class="card" style="padding:12px 16px;">
-        <div class="field" style="margin:0;">
-          <label for="select-escopo-bonus">Bônus de miners repetidos (mesmo nome e nível)</label>
-          <select id="select-escopo-bonus" onchange="mudarEscopoBonus(this.value)">
-            <option value="sala">Conta uma vez só na sala inteira (padrão desde a v95)</option>
-            <option value="rack">Conta uma vez por rack (regra da v94 e anteriores)</option>
-          </select>
+      <details class="card" style="padding:12px 16px;">
+        <summary style="cursor:pointer;">Calibração com o perfil do jogo</summary>
+        <div class="field" style="margin:10px 0 0;">
+          <label for="input-bonus-extra">Bônus fixo extra (%) — o que o jogo soma por fora dos miners</label>
+          <input type="text" id="input-bonus-extra" inputmode="decimal" placeholder="10" onchange="mudarBonusExtra()">
         </div>
-      </div>
+        <p class="hint" style="margin:8px 0 0; text-align:left;">
+          Pra comparar com o jogo, use Mineradoras &times; (1 + Poder bônus) + Rack Bonus do perfil. Games e Temporary variam
+          conforme você joga e ficam de fora.
+        </p>
+      </details>
 
       <div id="resultado-calculo"></div>
     </section>
@@ -1185,7 +1187,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v95';
+const APP_VERSION = 'v96';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2769,8 +2771,8 @@ function switchScreen(name){
     // busca miners e racks direto do banco antes de calcular, pra nunca ficar com dados
     // desatualizados (ex: um cadastro feito e ido direto pra essa aba, sem passar por outra tela)
     document.getElementById('resultado-calculo').innerHTML = '<div class="card"><div class="empty-state">Carregando dados atualizados...</div></div>';
-    const selEscopo = document.getElementById('select-escopo-bonus');
-    if (selEscopo) selEscopo.value = ESCOPO_BONUS_REPETIDO;
+    const inExtra = document.getElementById('input-bonus-extra');
+    if (inExtra) inExtra.value = String(BONUS_FIXO_EXTRA);
     (async () => {
       await loadMiners();
       await loadRacks();
@@ -4083,17 +4085,19 @@ const GAMES_POWER = 0;      // não cadastrado no app ainda
 const TEMPORARY_BOOST = 0;  // não cadastrado no app ainda
 const MAX_RACKS_POR_SALA = 12;
 
-// v95 — ESCOPO DO BÔNUS DE MINERS REPETIDOS (mesmo nome e nível):
-//   'sala' = o bônus de um tipo conta UMA vez só na sala inteira, não importa em quantos racks ele esteja
-//   'rack' = conta uma vez por rack (regra usada até a v94)
-// Motivo da mudança: o jogo não creditou o bônus da 2ª cópia de um miner em outro rack (o app creditava),
-// e por isso o app mandava trocar um miner por outro "melhor" que na prática fazia o Total Power cair.
+// v96 — REGRAS CONFIRMADAS com o perfil do jogo (Mineradoras, Poder bônus e Rack Bonus):
+//  1) o bônus de miners repetidos (mesmo nome e nível) conta UMA vez só na sala inteira, em qualquer rack;
+//  2) o jogo soma um bônus fixo de +10,00% por fora dos miners (BONUS_FIXO_EXTRA);
+//  3) Games e Temporary mudam toda hora (sobem quando joga, caem quando para) — não entram na comparação.
+//  Total estável = Mineradoras x (1 + (bônus dos miners + extra fixo)/100) + Rack Bonus
 let ESCOPO_BONUS_REPETIDO = 'sala';
-try { const salvo = localStorage.getItem('lalicoin_escopo_bonus'); if (salvo === 'rack' || salvo === 'sala') ESCOPO_BONUS_REPETIDO = salvo; } catch (e) {}
-const escopoSala = () => ESCOPO_BONUS_REPETIDO === 'sala';
-function mudarEscopoBonus(valor){
-  ESCOPO_BONUS_REPETIDO = valor === 'rack' ? 'rack' : 'sala';
-  try { localStorage.setItem('lalicoin_escopo_bonus', ESCOPO_BONUS_REPETIDO); } catch (e) {}
+const escopoSala = () => true;
+let BONUS_FIXO_EXTRA = 10;
+try { const e = localStorage.getItem('lalicoin_bonus_extra'); if (e !== null && isFinite(Number(e)) && Number(e) >= 0) BONUS_FIXO_EXTRA = Number(e); } catch (err) {}
+function mudarBonusExtra(){
+  const v = Number(String(document.getElementById('input-bonus-extra').value).replace(',', '.'));
+  BONUS_FIXO_EXTRA = isFinite(v) && v >= 0 ? v : 0;
+  try { localStorage.setItem('lalicoin_bonus_extra', String(BONUS_FIXO_EXTRA)); } catch (err) {}
   calcularMelhorRack();
 }
 
@@ -4175,7 +4179,7 @@ function distribuirMinersGuloso(racksSala, poolMiners){
   };
   // Total Power da sala se esta unidade entrasse agora na prateleira
   const totalSeColocar = (u, bonusRackPct) =>
-    (somaPoder + u.poder + GAMES_POWER) * (1 + (somaBonus + bonusNovo(u)) / 100)
+    (somaPoder + u.poder + GAMES_POWER) * (1 + (somaBonus + bonusNovo(u) + BONUS_FIXO_EXTRA) / 100)
     + ganhoRacks + u.poder * bonusRackPct / 100 + TEMPORARY_BOOST;
 
   // candidato "maior bônus": lê a tabela ordenada por bônus e fica com o que mais bônus NOVO traz
@@ -4323,7 +4327,7 @@ function estatisticasPrateleiras(prateleiras, pct, poder){
 }
 
 function totalPowerDe(P, B, G){
-  return (P + GAMES_POWER) * (1 + B / 100) + G + TEMPORARY_BOOST;
+  return (P + GAMES_POWER) * (1 + (B + BONUS_FIXO_EXTRA) / 100) + G + TEMPORARY_BOOST;
 }
 
 function somasDoLayout(layout, poder){
@@ -4377,7 +4381,7 @@ function reconstruirComEstimativa(racksSala, unidades, simples, P, B){
       for (const u of restantes){
         let novo = 0;
         u.tipos.forEach((b, k) => { if (!tiposRack.has(k)) novo += b; });
-        const valor = u.poder * (1 + B / 100 + rk.pct / 100) + P * novo / 100;
+        const valor = u.poder * (1 + (B + BONUS_FIXO_EXTRA) / 100 + rk.pct / 100) + (P + GAMES_POWER) * novo / 100;
         if (valor > melhorValor || (valor === melhorValor && melhor && u.poder > melhor.poder)){
           melhor = u;
           melhorValor = valor;
@@ -4910,7 +4914,7 @@ async function executarCalculoMelhorRack(){
   const { porRack, poderBase: poderTotalGeral, ganhoRacks: ganhoRacksGeral, colBonus: colBonusGlobal, poolRestante, etapas } =
     distribuirMinersNaSala(racksAtivos, poolParaRacks);
 
-  const valorFinalGeral = (poderTotalGeral + GAMES_POWER) * (1 + colBonusGlobal / 100) + ganhoRacksGeral + TEMPORARY_BOOST;
+  const valorFinalGeral = totalPowerDe(poderTotalGeral, colBonusGlobal, ganhoRacksGeral);
   const resultadosPorRack = porRack;
   const racksComResultado = resultadosPorRack.filter(item => item.resultado).length;
 
@@ -4931,15 +4935,19 @@ async function executarCalculoMelhorRack(){
       <div class="result-summary" style="flex-wrap:wrap; gap:14px;">
         <div class="metric">
           <div class="val">${formatarPoder(poderTotalGeral)}</div>
-          <div class="lbl">Poder total combinado</div>
+          <div class="lbl">Mineradoras (poder dos miners)</div>
         </div>
         <div class="metric">
           <div class="val">${formatarPoder(valorFinalGeral)}</div>
-          <div class="lbl">Total Power (com bônus)</div>
+          <div class="lbl">Total Power estável (sem Games/Temporary)</div>
         </div>
         <div class="metric">
-          <div class="val">${colBonusGlobal.toFixed(2)}%</div>
-          <div class="lbl">Collection Bonus (miners da sala)</div>
+          <div class="val">${(colBonusGlobal + BONUS_FIXO_EXTRA).toFixed(2)}%</div>
+          <div class="lbl">Poder bônus (miners ${colBonusGlobal.toFixed(2)}% + fixo ${BONUS_FIXO_EXTRA.toFixed(2)}%)</div>
+        </div>
+        <div class="metric">
+          <div class="val">${formatarPoderDesde(ganhoRacksGeral, comboSala.length ? unidadeReferencia(comboSala) : 'H/s')}</div>
+          <div class="lbl">Rack Bonus</div>
         </div>
         <div class="metric">
           <div class="val">${racksComResultado}</div>
@@ -4959,8 +4967,8 @@ async function executarCalculoMelhorRack(){
           <div class="lbl">Poder total dos miners</div>
         </div>
         <div class="metric">
-          <div class="val">${sala.colBonus.toFixed(2)}%</div>
-          <div class="lbl">Collection Bonus</div>
+          <div class="val">${(sala.colBonus + BONUS_FIXO_EXTRA).toFixed(2)}%</div>
+          <div class="lbl">Poder bônus (inclui fixo)</div>
         </div>
         <div class="metric">
           <div class="val">${formatarPoderDesde(sala.ganhoRacks, sala.unidadeRef)}</div>
