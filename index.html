@@ -895,7 +895,7 @@
           Este app ainda não cadastra Games nem Temporary, então essas parcelas entram como 0. O
           Collection Bonus é a soma do bônus dos mineradores da sala; por padrão (v95), dois mineradores de mesmo
           nome e nível somam o bônus uma vez só na sala inteira — dá pra voltar à regra "uma vez por rack" no seletor acima. <b>Como o cálculo funciona:</b> (1) só racks ativos, do maior
-          bônus pro menor — empate: mais slots, depois nome — no máximo 12 por sala; (2) monta todas as
+          bônus pro menor — empate: mais slots, depois nome — todos os racks ativos entram, sem limite fixo de racks; (2) monta todas as
           combinações de 2 mineradores de 1 slot (soma poder e bônus; mesmo nome e nível na mesma
           prateleira não soma o bônus de novo); (3) o par ou minerador de 2 slots de maior poder vai pro primeiro rack; (4) a
           cada prateleira seguinte, testa o de maior poder contra o de maior bônus, calcula o Total Power
@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v97';
+const APP_VERSION = 'v98';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4053,7 +4053,7 @@ function calcularMelhorRackIndice(){
    acima, todo comentado, só como referência. O método atual segue estes passos:
 
    01) Racks: só os ATIVOS, ordenados por maior bônus; empate = mais slots; empate = nome em ordem
-       alfabética. Uma sala comporta no máximo 12 racks, então só os 12 primeiros entram.
+       alfabética. (v98) Não há mais limite fixo de 12 racks: entram TODOS os racks ativos.
    02) Tabelas temporárias de PARES: todos os miners ativos de 1 slot, combinados dois a dois,
        somando poder e bônus (se os dois forem de mesmo nome e nível, o bônus conta uma vez só).
        Uma tabela ordenada por maior poder e outra por maior bônus.
@@ -4061,7 +4061,7 @@ function calcularMelhorRackIndice(){
        um miner só). O de maior poder entra no 1º rack (sem olhar o bônus) e sai de todas as listas.
    04) Para cada prateleira seguinte: testa o de MAIOR PODER e o de MAIOR BÔNUS (novo pra sala),
        calcula o Total Power da sala com cada um, e o vencedor entra definitivo no rack e sai das listas.
-   05) Repete até acabarem os racks (12) ou os miners; cada rack respeita a sua quantidade de slots.
+   05) Repete até acabarem os racks ativos ou os miners; cada rack respeita a sua quantidade de slots.
 
    Total Power = (Poder dos miners + Games) x (1 + soma dos bônus dos miners da sala)
                  + Rack Bonus + Temporary.
@@ -4069,7 +4069,8 @@ function calcularMelhorRackIndice(){
    o modo antigo (uma vez por rack) continua disponível no seletor da aba Cálculo. */
 const GAMES_POWER = 0;      // não cadastrado no app ainda
 const TEMPORARY_BOOST = 0;  // não cadastrado no app ainda
-const MAX_RACKS_POR_SALA = 12;
+// v98 — removido o limite fixo de 12 racks por sala (const MAX_RACKS_POR_SALA = 12). Agora o cálculo
+// usa a quantidade de racks ATIVOS cadastrados, sem precisar de cadastro de salas.
 
 // v97 — REGRAS: (1) o bônus de miners repetidos (mesmo nome e nível) conta UMA vez só na sala inteira;
 //  (2) Games e Temporary mudam toda hora (sobem quando joga, caem quando para) e ficam fora da comparação.
@@ -5082,16 +5083,15 @@ async function executarCalculoMelhorRack(){
 //     });
 //   }
 
-  // PASSO 01 — só racks ativos, por maior bônus > mais slots > nome; no máximo 12 por sala
-  const RACKS_POR_SALA = MAX_RACKS_POR_SALA;
+  // PASSO 01 — só racks ativos, por maior bônus > mais slots > nome (v98: sem limite de 12 racks;
+  // vale a quantidade de racks ativos)
   const todosRacksAtivos = myRacks.filter(r => r.ativo !== false);
   if (!todosRacksAtivos.length){
     box.innerHTML = `<div class="card"><div class="empty-state">Cadastre (ou marque como "ativo") pelo menos um rack na aba Rack.</div></div>`;
     return;
   }
   const racksOrdenados = ordenarRacksPorPrioridade(todosRacksAtivos);
-  const racksAtivos = racksOrdenados.slice(0, RACKS_POR_SALA);
-  const racksExcedentes = racksOrdenados.slice(RACKS_POR_SALA);
+  const racksAtivos = racksOrdenados;
 
   // miners ativos que podem entrar no cálculo (respeita "Considerar no cálculo do rack")
   const poolParaRacks = myMiners.filter(m => m.usar_rack !== false && m.ativo !== false).sort(compararMinersPorPoder);
@@ -5104,7 +5104,7 @@ async function executarCalculoMelhorRack(){
   const resultadosPorRack = porRack;
   const racksComResultado = resultadosPorRack.filter(item => item.resultado).length;
 
-  // uma única sala (até 12 racks)
+  // um único conjunto com todos os racks ativos (v98: sem limite de 12)
   const comboSala = resultadosPorRack.filter(item => item.resultado).flatMap(item => item.resultado.combo);
   const salas = [{
     numero: 1,
@@ -5146,7 +5146,7 @@ async function executarCalculoMelhorRack(){
   // cartão de total de cada sala, exibido antes dos racks daquela sala
   const cardSala = (sala) => `
     <div class="card" style="border-color:var(--gold-dim);">
-      <div class="section-title">Sala ${sala.numero} — total da sala</div>
+      <div class="section-title">Total de todos os racks ativos</div>
       <div class="result-summary" style="flex-wrap:wrap; gap:14px;">
         <div class="metric">
           <div class="val">${formatarPoderDesde(sala.poderBase, sala.unidadeRef)}</div>
@@ -5184,8 +5184,7 @@ async function executarCalculoMelhorRack(){
     <div class="card">
       <div class="section-title">Ordem de prioridade dos racks (maior bônus primeiro)</div>
       <p class="hint" style="margin:0 0 10px; text-align:left;">
-        Ordem: maior bônus, depois mais slots, depois nome. Uma sala comporta no máximo 12 racks — foram
-        usados os ${racksAtivos.length} primeiros racks ativos desta lista${racksExcedentes.length ? '; ficaram de fora (limite da sala): ' + racksExcedentes.map(r => escapeHtml(nomeComNivel(r)) + ' (' + (r.slots || 4) + ' slots, ' + fmtNum(r.bonus) + '%)').join(', ') : ''}.
+        Ordem: maior bônus, depois mais slots, depois nome. Foram usados todos os ${racksAtivos.length} racks ativos.
       </p>
       ${racksAtivos.map((r, i) => `
         <div class="alt-item">
@@ -5201,12 +5200,9 @@ async function executarCalculoMelhorRack(){
     : '';
 
   box.innerHTML = resumoGeral + resumoEtapas + resumoPrioridade + resultadosPorRack.map((item, indiceRack) => {
-    // distribui os racks em salas de 12: os primeiros 12 (por prioridade) vão pra Sala 1,
-    // os próximos 12 pra Sala 2, e assim por diante
-    const numeroSala = Math.floor(indiceRack / RACKS_POR_SALA) + 1;
-    const rackNaSala = (indiceRack % RACKS_POR_SALA) + 1;
-    const prefixoSala = `Sala ${numeroSala} / Rack ${rackNaSala} - `;
-    const cabecalhoSala = rackNaSala === 1 ? cardSala(salas[numeroSala - 1]) : '';
+    // v98 — sem divisão em salas de 12: numera os racks ativos em sequência
+    const prefixoSala = `Rack ${indiceRack + 1} - `;
+    const cabecalhoSala = indiceRack === 0 ? cardSala(salas[0]) : '';
     if (item.insuficiente){
       return cabecalhoSala + `
         <div class="card">
