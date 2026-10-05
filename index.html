@@ -859,7 +859,7 @@
 
       <div class="card">
         <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-          <span>Meus racks <span id="contador-racks" class="counter-badge">0</span></span>
+          <span>Meus racks <span id="contador-racks" class="counter-badge" title="Total de racks">0</span> <span style="font-size:12px; font-weight:400; color:var(--muted);">Ativos</span> <span id="contador-racks-ativos" class="counter-badge" title="Racks ativos">0</span></span>
           <button type="button" class="btn btn-ghost" style="width:auto; padding:6px 14px; font-size:12px;" onclick="exportarRacksTxt()">Exportar .txt</button>
         </div>
         <div id="racks-list"><div class="empty-state">Nenhum rack vinculado ainda.</div></div>
@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v98';
+const APP_VERSION = 'v99';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3452,6 +3452,9 @@ async function loadRacks(){
 function renderRacks(){
   const contador = document.getElementById('contador-racks');
   if (contador) contador.textContent = myRacks.length;
+  // v99 — quantidade de racks ativos ao lado do total
+  const contadorAtivos = document.getElementById('contador-racks-ativos');
+  if (contadorAtivos) contadorAtivos.textContent = myRacks.filter(r => r.ativo !== false).length;
 
   const list = document.getElementById('racks-list');
   if (!myRacks.length){
