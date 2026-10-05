@@ -794,7 +794,7 @@
 
       <div class="card">
         <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-          <span>Meus miners <span id="contador-miners" class="counter-badge">0</span></span>
+          <span>Meus miners <span id="contador-miners" class="counter-badge" title="Total de miners">0</span> <span style="font-size:12px; font-weight:400; color:var(--muted);">Ativos</span> <span id="contador-miners-ativos" class="counter-badge" title="Miners ativos">0</span></span>
           <button type="button" class="btn btn-ghost" style="width:auto; padding:6px 14px; font-size:12px;" onclick="exportarMinersTxt()">Exportar .txt</button>
         </div>
         <div id="miners-list"><div class="empty-state">Nenhum minerador vinculado ainda.</div></div>
@@ -1175,7 +1175,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v99';
+const APP_VERSION = 'v100';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3206,6 +3206,9 @@ let editingMinerId = null;
 function renderMiners(){
   const contador = document.getElementById('contador-miners');
   if (contador) contador.textContent = myMiners.length;
+  // v100 — quantidade de miners ativos ao lado do total
+  const contadorAtivos = document.getElementById('contador-miners-ativos');
+  if (contadorAtivos) contadorAtivos.textContent = myMiners.filter(m => m.ativo !== false).length;
 
   const list = document.getElementById('miners-list');
   if (!myMiners.length){
