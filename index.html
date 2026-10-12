@@ -335,7 +335,9 @@
     margin-bottom:8px; cursor:pointer;
   }
   .check-line:last-child{margin-bottom:0;}
-  .check-line input[type="checkbox"]{width:16px; height:16px; accent-color:var(--gold); cursor:pointer;}
+  .check-line input[type="checkbox"], .check-line input[type="radio"]{width:16px; height:16px; padding:0; accent-color:var(--gold); cursor:pointer;}
+  .radio-line{display:flex; gap:24px; align-items:center;}
+  .radio-line .check-line{margin-bottom:0; font-size:14px;}
 
   .tag-off{
     font-size:9px; color:var(--muted); border:1px solid var(--border); border-radius:100px;
@@ -662,7 +664,10 @@
           </div>
           <div class="field">
             <label>Slots ocupados no rack</label>
-            <input type="number" id="cat-miner-slots" required step="1" min="1" value="2" placeholder="Ex: 2">
+            <div class="radio-line" id="cat-miner-slots">
+              <label class="check-line"><input type="radio" name="cat-miner-slots" value="1"> 1</label>
+              <label class="check-line"><input type="radio" name="cat-miner-slots" value="2" checked> 2</label>
+            </div>
           </div>
           <div class="field">
             <label class="check-line"><input type="checkbox" id="cat-miner-pode-vendido"> Pode ser vendido</label>
@@ -1175,7 +1180,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v100';
+const APP_VERSION = 'v103';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2852,7 +2857,10 @@ function renderCatalogoMiners(){
           </div>
           <div class="field" style="margin-bottom:0;">
             <label>Slots ocupados no rack</label>
-            <input type="number" step="1" min="1" id="edit-cat-miner-slots-${c.id}" value="${c.slots_ocupados}">
+            <div class="radio-line">
+              <label class="check-line"><input type="radio" name="edit-cat-miner-slots-${c.id}" value="1" ${Number(c.slots_ocupados) === 1 ? 'checked' : ''}> 1</label>
+              <label class="check-line"><input type="radio" name="edit-cat-miner-slots-${c.id}" value="2" ${Number(c.slots_ocupados) === 1 ? '' : 'checked'}> 2</label>
+            </div>
           </div>
           <div class="field" style="margin-bottom:0;">
             <label class="check-line"><input type="checkbox" id="edit-cat-miner-pode-vendido-${c.id}" ${c.pode_vendido ? 'checked' : ''}> Pode ser vendido</label>
@@ -2899,7 +2907,7 @@ async function salvarEdicaoCatalogoMiner(id){
   const poder = parseFloat(document.getElementById(`edit-cat-miner-poder-${id}`).value);
   const unidade = document.getElementById(`edit-cat-miner-unidade-${id}`).value;
   const bonus = parseFloat(document.getElementById(`edit-cat-miner-bonus-${id}`).value);
-  const slots_ocupados = parseInt(document.getElementById(`edit-cat-miner-slots-${id}`).value, 10);
+  const slots_ocupados = parseInt((document.querySelector(`input[name="edit-cat-miner-slots-${id}"]:checked`) || {}).value, 10) || 2;
   const pode_vendido = document.getElementById(`edit-cat-miner-pode-vendido-${id}`).checked;
 
   if (!nome || isNaN(poder) || isNaN(bonus) || isNaN(slots_ocupados) || slots_ocupados < 1){
@@ -2939,7 +2947,7 @@ async function handleAddCatalogoMiner(e){
   const poder = parseFloat(document.getElementById('cat-miner-poder').value);
   const unidade = document.getElementById('cat-miner-unidade').value;
   const bonus = parseFloat(document.getElementById('cat-miner-bonus').value);
-  const slots_ocupados = parseInt(document.getElementById('cat-miner-slots').value, 10);
+  const slots_ocupados = parseInt((document.querySelector('input[name="cat-miner-slots"]:checked') || {}).value, 10) || 2;
   const pode_vendido = document.getElementById('cat-miner-pode-vendido').checked;
 
   if (catalogoMiners.some(c => chaveMiner(c.nome, c.nivel) === chaveMiner(nome, nivel))){
@@ -2961,7 +2969,7 @@ async function handleAddCatalogoMiner(e){
   document.getElementById('cat-miner-nome').value = '';
   document.getElementById('cat-miner-poder').value = '';
   document.getElementById('cat-miner-bonus').value = '';
-  document.getElementById('cat-miner-slots').value = '2';
+  document.querySelector('input[name="cat-miner-slots"][value="2"]').checked = true;
   document.getElementById('cat-miner-foto-data').value = '';
   document.getElementById('cat-miner-foto-preview').style.display = 'none';
   document.getElementById('cat-miner-foto-preview').src = '';
