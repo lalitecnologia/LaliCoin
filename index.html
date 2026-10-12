@@ -1180,7 +1180,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v103';
+const APP_VERSION = 'v104';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4300,7 +4300,7 @@ function distribuirMinersGuloso(racksSala, poolMiners){
    Testado: cadastrar qualquer miner a mais nunca reduz o Total Power. */
 const TEMPO_MAX_REFINO_MS = 4000; // tempo total das trocas, dividido entre os pontos de partida
 const EPS_REL = 1e-12;
-const TEMPO_MAX_EXATO_MS = 8000; // limite da busca exata (v97)
+const TEMPO_MAX_EXATO_MS = 30000; // limite da busca exata (v97: 8 s; v104: 30 s)
 
 function classeSlots(m){ return slotsDoMiner(m) >= 2 ? 2 : 1; }
 
@@ -4737,10 +4737,23 @@ function igualarEntreRacksMesmoBonus(layout, poder){
 // Devolve { melhor: { layout, total } | null, completo } — melhor só vem se superar "totalAtual"; completo = false
 // se estourou o tempo; devolve null se o problema não cabe na busca (muitos miners de 1 slot).
 // =====================================================================================================
-function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
+// v104 — busca exata agora aceita QUALQUER quantidade de miners de 1 slot (antes era ignorada com mais de 10),
+// testa as combinações mais promissoras primeiro (cota superior), usa até 30 s e devolve o controle ao navegador
+// pra mostrar o progresso. aoProgredir(texto) é opcional.
+function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs, aoProgredir){
+  return (async () => {
   const t0 = Date.now();
-  const SIMPLES_MAX = 10;      // até 2^10 = 1024 subconjuntos de miners de 1 slot (com limite de tempo)
   const estourou = () => Date.now() - t0 > tempoMaxMs;
+  let ultimoRespiro = Date.now();
+  // devolve o controle ao navegador ~10x por segundo (a tela não trava nos 30 s) e avisa o progresso
+  const respirar = async (texto) => {
+    if (Date.now() - ultimoRespiro < 100) return;
+    ultimoRespiro = Date.now();
+    if (aoProgredir) aoProgredir(texto);
+    await new Promise(res => setTimeout(res, 0));
+  };
+  const ESC = 1000;      // bônus guardado em milésimos de % (inteiro) na programação dinâmica
+  const MUL = 1e9;       // chave do estado = quantos ficaram de fora x MUL + bônus em milésimos
 
   // prateleiras de todos os racks, da de maior bônus pra de menor
   const prats = [];
@@ -4757,7 +4770,6 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
 
   const duplos = poolMiners.filter(m => classeSlots(m) === 2);
   const simples = poolMiners.filter(m => classeSlots(m) === 1).sort(compararMinersPorPoder);
-  if (simples.length > SIMPLES_MAX) return null;
 
   // grupos de duplos do mesmo tipo (mesmo poder e bônus): ficam juntos na ordem de poder
   const mapaG = new Map();
@@ -4768,14 +4780,83 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
   });
   const grupos = [...mapaG.values()].sort((a, b) => (b.pw - a.pw) || (b.b - a.b) || (a.k < b.k ? -1 : 1));
 
+  // ---- miners de 1 slot (v101): em vez de testar 2^n subconjuntos, testa quantas cópias de cada TIPO entram
+  // (sempre as mais fortes do tipo) e deixa os mais promissores primeiro, cortando os que não têm como vencer ----
+  const tiposS = new Map();
+  simples.forEach(m => {
+    const k = chaveMiner(m.nome, m.nivel);
+    if (!tiposS.has(k)) tiposS.set(k, { idx: tiposS.size, b: Number(m.bonus) || 0, n: 0 });
+    tiposS.get(k).n++;
+  });
+  const nTS = tiposS.size;
+  const tipoDe = simples.map(m => tiposS.get(chaveMiner(m.nome, m.nivel)).idx);
+  const maxPorTipo = new Array(nTS).fill(0);
+  const bonusTipoS = new Array(nTS).fill(0);
+  tiposS.forEach(t => { maxPorTipo[t.idx] = t.n; bonusTipoS[t.idx] = t.b; });
+  let totalCombos = 1;
+  for (let t = 0; t < nTS; t++){ totalCombos *= (maxPorTipo[t] + 1); if (totalCombos > (1 << 21)) return null; }
+
+  const pwSimples = simples.map(m => poder(m));
+  const pwDup = [];                       // poder dos duplos, do maior pro menor
+  grupos.forEach(g => { for (let q = 0; q < g.miners.length; q++) pwDup.push(g.pw); });
+  const PD = [0];
+  pwDup.forEach(x => PD.push(PD[PD.length - 1] + x));
+  const nDup = pwDup.length;
+  let BD = 0;
+  grupos.forEach(g => { BD += g.b; });
+
+  // cota superior de cada combinação de miners de 1 slot (cada parte no seu melhor caso)
+  const combos = [];
+  const qAtual = new Array(nTS).fill(0);
+  const decodifica = (idx) => { for (let t = 0; t < nTS; t++){ const base = maxPorTipo[t] + 1; qAtual[t] = idx % base; idx = Math.floor(idx / base); } };
+  const forcadosDe = (q) => {
+    const cont = new Array(nTS).fill(0);
+    const K = [];
+    for (let i = 0; i < simples.length; i++){
+      const t = tipoDe[i];
+      if (cont[t] < q[t]){ cont[t]++; K.push(simples[i]); }
+    }
+    return K;
+  };
+  for (let idx = 0; idx < totalCombos; idx++){
+    decodifica(idx);
+    let nK = 0, PK = 0, bK = 0;
+    const cont = new Array(nTS).fill(0);
+    const pk = [];
+    for (let i = 0; i < simples.length; i++){
+      const t = tipoDe[i];
+      if (cont[t] < qAtual[t]){ cont[t]++; nK++; PK += pwSimples[i]; pk.push(pwSimples[i]); }
+    }
+    for (let t = 0; t < nTS; t++) if (qAtual[t] > 0) bK += bonusTipoS[t];
+    const nsh = Math.ceil(nK / 2);
+    if (nsh > N) continue;
+    const nd = Math.min(N - nsh, nDup);
+    // prateleiras da cota: pares dos mais fortes + os nd duplos mais fortes, em ordem de poder
+    const forc = [];
+    for (let i = 0; i < pk.length; i += 2) forc.push(pk[i] + (i + 1 < pk.length ? pk[i + 1] : 0));
+    let a = 0, b = 0, pos = 0, Gub = 0;
+    while (pos < N && (a < forc.length || b < nd)){
+      let x;
+      if (b >= nd || (a < forc.length && forc[a] >= pwDup[b])) x = forc[a++]; else x = pwDup[b++];
+      Gub += x * r[pos++];
+    }
+    const ub = (PK + PD[nd]) * (1 + (bK + BD) / 100) + Gub;
+    combos.push({ idx, ub });
+  }
+  combos.sort((x, y) => y.ub - x.ub);
+
   let melhor = null;      // { total, layout }
   let incumbente = totalAtual * (1 + 1e-9);   // folga contra ruído de ponto flutuante
   let interrompido = false;
+  let feitos = 0;
 
-  const nSub = 1 << simples.length;
-  for (let mask = 0; mask < nSub && !interrompido; mask++){
-    // miners de 1 slot escolhidos -> prateleiras: os mais fortes juntos; se sobrar um, fica sozinho
-    const K = simples.filter((_, i) => mask & (1 << i));
+  for (const cb of combos){
+    if (cb.ub <= incumbente) break;           // os próximos têm cota ainda menor: não há como vencer
+    if (estourou()){ interrompido = true; break; }
+    feitos++;
+    await respirar(`Busca exata: combinação ${feitos} de até ${combos.length} (miners de 1 slot)`);
+    decodifica(cb.idx);
+    const K = forcadosDe(qAtual);
     const forcados = [];
     for (let i = 0; i < K.length; i += 2){
       const mem = K.slice(i, i + 2);
@@ -4784,7 +4865,7 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
     if (forcados.length > N) continue;
     const tiposK = new Set();
     let bForcado = 0;
-    K.forEach(m => { const k = chaveMiner(m.nome, m.nivel); if (!tiposK.has(k)){ tiposK.add(k); bForcado += Number(m.bonus) || 0; } });
+    K.forEach(m => { const kk = chaveMiner(m.nome, m.nivel); if (!tiposK.has(kk)){ tiposK.add(kk); bForcado += Number(m.bonus) || 0; } });
 
     // itens em ordem de poder (empate: forçados antes, grupos juntos)
     const itens = [];
@@ -4794,20 +4875,16 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
     const M = itens.length;
     const U = itens.reduce((s, it) => s + it.m, 0);
     const k = Math.max(0, U - N);                 // quantos duplos ficam de fora
-    const nDuplos = duplos.length;
-    if (k > nDuplos) continue;
+    if (k > nDup) continue;
 
     // poder por unidade (em ordem) e somas acumuladas
     const pwU = [];
-    const idxItemDaUnidade = [];
-    itens.forEach((it, ii) => { for (let q = 0; q < it.m; q++){ pwU.push(it.pw); idxItemDaUnidade.push(ii); } });
+    itens.forEach(it => { for (let q = 0; q < it.m; q++) pwU.push(it.pw); });
     const PS = [0];
     pwU.forEach(x => PS.push(PS[PS.length - 1] + x));
-    const iniItem = [];   // unidade em que cada item começa
-    { let c = 0; itens.forEach(it => { iniItem.push(c); c += it.m; }); iniItem.push(c); }
 
     // cota de G pro que falta: item j..j+c-1 nas posições (j-e)..(j-e+c-1)
-    const Gub = (j, e) => {
+    const Gubf = (j, e) => {
       const c = (U - j) - (k - e);   // quantos dos que faltam ainda ficam nas prateleiras
       if (c < 0 || e > k) return -1;
       let s = 0;
@@ -4815,7 +4892,7 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
       return s;
     };
     // cota de B pro que falta: maiores bônus entre os grupos restantes
-    const bonusRestante = [];  // por item i: prefixos dos bônus em ordem decrescente dos itens i..M-1
+    const bonusRestante = [];
     for (let i = 0; i <= M; i++){
       const arr = [];
       for (let t = i; t < M; t++) if (!itens[t].forcado) arr.push(itens[t].g.b);
@@ -4828,14 +4905,14 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
     const gubDe = (j, e) => {
       const key = j * 1000 + e;
       let v = GubCache.get(key);
-      if (v === undefined){ v = Gub(j, e); GubCache.set(key, v); }
+      if (v === undefined){ v = Gubf(j, e); GubCache.set(key, v); }
       return v;
     };
 
     // ---- programação dinâmica ----
-    const bq0 = Math.round(bForcado * 100);
+    const bq0 = Math.round(bForcado * ESC);
     let camada = new Map();   // chave (e, bq) -> lista de { P, G, prev, c }
-    const chave = (e, bq) => e * 1e7 + bq;
+    const chave = (e, bq) => e * MUL + bq;
     camada.set(chave(0, bq0), [{ P: 0, G: 0, prev: null, c: 0, item: -1 }]);
     let j = 0;
     let cont = 0;
@@ -4843,15 +4920,15 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
       const it = itens[ii];
       const prox = new Map();
       for (const [ch, lista] of camada){
-        const e = Math.floor(ch / 1e7);
-        const bq = ch - e * 1e7;
+        const e = Math.floor(ch / MUL);
+        const bq = ch - e * MUL;
         const maxC = it.forcado ? 0 : Math.min(it.m, k - e);
         for (let c = 0; c <= maxC; c++){
           const mantidos = it.m - c;
           const pos0 = j - e;
           if (pos0 + mantidos > N) continue;
           const e2 = e + c;
-          const bq2 = bq + (!it.forcado && mantidos > 0 ? Math.round(it.g.b * 100) : 0);
+          const bq2 = bq + (!it.forcado && mantidos > 0 ? Math.round(it.g.b * ESC) : 0);
           const Padd = it.pw * mantidos;
           const Gadd = it.pw * (R[pos0 + mantidos] - R[pos0]);
           const gub = gubDe(j + it.m, e2);
@@ -4862,7 +4939,7 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
           const prem = PS[Math.min(j + it.m + cRest, U)] - PS[j + it.m];
           for (const st of lista){
             const P2 = st.P + Padd, G2 = st.G + Gadd;
-            const ub = (P2 + prem) * (1 + (bq2 / 100 + bRest) / 100) + G2 + gub;
+            const ub = (P2 + prem) * (1 + (bq2 / ESC + bRest) / 100) + G2 + gub;
             if (ub <= incumbente) continue;
             const key = chave(e2, bq2);
             let l2 = prox.get(key);
@@ -4876,23 +4953,26 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
             for (let z = l2.length - 1; z >= 0; z--){ if (P2 >= l2[z].P && G2 >= l2[z].G) l2.splice(z, 1); }
             l2.push({ P: P2, G: G2, prev: st, c, item: ii });
           }
-          if ((++cont & 1023) === 0 && estourou()){ interrompido = true; break; }
+          if ((++cont & 1023) === 0){
+            if (estourou()){ interrompido = true; break; }
+            await respirar(`Busca exata: combinação ${feitos} de até ${combos.length} (miners de 1 slot)`);
+          }
         }
         if (interrompido) break;
       }
       camada = prox;
       j += it.m;
     }
-    if (interrompido) { /* guarda o que já achou nos subconjuntos anteriores */ break; }
+    if (interrompido) break;   // guarda o que já achou nas combinações anteriores
 
     // melhor estado final (e = k)
     let melhorFinal = null, melhorTotal = incumbente;
     for (const [ch, lista] of camada){
-      const e = Math.floor(ch / 1e7);
+      const e = Math.floor(ch / MUL);
       if (e !== k) continue;
-      const bq = ch - e * 1e7;
+      const bq = ch - e * MUL;
       for (const st of lista){
-        const tot = st.P * (1 + (bq / 100) / 100) + st.G;
+        const tot = st.P * (1 + (bq / ESC) / 100) + st.G;
         if (tot > melhorTotal){ melhorTotal = tot; melhorFinal = st; }
       }
     }
@@ -4914,9 +4994,10 @@ function otimizarExato(racksSala, poolMiners, poder, totalAtual, tempoMaxMs){
     melhor = { layout, total: melhorTotal };
   }
   return { melhor, completo: !interrompido };
+  })();
 }
 
-function distribuirMinersNaSala(racksSala, poolMiners){
+async function distribuirMinersNaSala(racksSala, poolMiners, aoProgredir){
   const cachePoder = new Map();
   const poder = m => {
     let v = cachePoder.get(m.id);
@@ -4970,7 +5051,11 @@ function distribuirMinersNaSala(racksSala, poolMiners){
   etapas.push({ nome: 'Após trocas entre miners, racks e prateleiras', total: somFinal.total });
 
   // passo 7b (v97) — busca exata: confere todas as combinações e só troca o resultado se achar algo melhor
-  const exato = otimizarExato(racksSala, poolMiners, poder, somFinal.total, TEMPO_MAX_EXATO_MS);
+  if (aoProgredir) aoProgredir('Busca exata: preparando as combinações…');
+  const exato = await otimizarExato(racksSala, poolMiners, poder, somFinal.total, TEMPO_MAX_EXATO_MS, aoProgredir);
+  if (!exato){
+    etapas.push({ nome: 'Busca exata não aplicada (combinações de miners de 1 slot demais) — resultado das trocas mantido', total: somFinal.total });
+  }
   if (exato){
     if (exato.melhor){
       ref = { ...ref, layout: exato.melhor.layout };
@@ -5112,7 +5197,9 @@ async function executarCalculoMelhorRack(){
 
   // PASSOS 02 a 05 — ver distribuirMinersNaSala
   const { porRack, poderBase: poderTotalGeral, ganhoRacks: ganhoRacksGeral, colBonus: colBonusGlobal, poolRestante, etapas } =
-    distribuirMinersNaSala(racksAtivos, poolParaRacks);
+    await distribuirMinersNaSala(racksAtivos, poolParaRacks, texto => {
+      box.innerHTML = `<div class="card"><div class="empty-state">Calculando a distribuição… ${escapeHtml(texto)}</div></div>`;
+    });
 
   const valorFinalGeral = totalPowerDe(poderTotalGeral, colBonusGlobal, ganhoRacksGeral);
   const resultadosPorRack = porRack;
