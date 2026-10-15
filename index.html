@@ -1180,7 +1180,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v105';
+const APP_VERSION = 'v106';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -4683,6 +4683,24 @@ function igualarEntreRacksMesmoBonus(layout, poder){
   };
   grupos.forEach(idxs => {
     if (idxs.length < 2) return;
+    // v106 — na sala (único modo ativo) a posição entre racks de MESMO bônus não muda P, B nem G, e as colisões
+    // de nome/nível não existem. Então ordena TODAS as prateleiras do grupo de uma vez (mais forte primeiro) e
+    // devolve aos racks na ordem de prioridade, mantendo quantas prateleiras cada rack tem. (Antes eram trocas
+    // duas a duas limitadas a 30 rodadas: com muitos racks de 0% a ordem ficava pela metade, ex.: um miner
+    // de 1 PH/s num rack anterior a um de 2,5 PH/s.)
+    if (escopoSala()){
+      const bonusPrat = sh => sh.reduce((s, m) => s + (Number(m.bonus) || 0), 0);
+      const todas = [];
+      idxs.forEach(i => novoLayout[i].shelves.forEach(sh => todas.push(sh)));
+      todas.sort((a, b) => (poderPrat(b) - poderPrat(a)) || (bonusPrat(b) - bonusPrat(a)));
+      let pos = 0;
+      idxs.forEach(i => {
+        const n = novoLayout[i].shelves.length;
+        novoLayout[i].shelves = todas.slice(pos, pos + n);
+        pos += n;
+      });
+      return;
+    }
     let mudou = true;
     let rodadas = 0;
     while (mudou && rodadas++ < 30){
