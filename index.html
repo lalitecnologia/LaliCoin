@@ -1180,7 +1180,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v106';
+const APP_VERSION = 'v107';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -5319,8 +5319,12 @@ async function executarCalculoMelhorRack(){
     : '';
 
   box.innerHTML = resumoGeral + resumoEtapas + resumoPrioridade + resultadosPorRack.map((item, indiceRack) => {
-    // v98 — sem divisão em salas de 12: numera os racks ativos em sequência
-    const prefixoSala = `Rack ${indiceRack + 1} - `;
+    // v107 — nomenclatura "Room: X / Rack: Y": a Room 1 comporta 12 racks e as demais 18 racks cada
+    // (ex.: 13º rack = Room 2 / Rack 1; 30º = Room 2 / Rack 18; 31º = Room 3 / Rack 1)
+    const nSeq = indiceRack + 1;
+    const numRoom = nSeq <= 12 ? 1 : 2 + Math.floor((nSeq - 13) / 18);
+    const numRackNaRoom = nSeq <= 12 ? nSeq : ((nSeq - 13) % 18) + 1;
+    const prefixoSala = `Room: ${numRoom} / Rack: ${numRackNaRoom} - `;
     const cabecalhoSala = indiceRack === 0 ? cardSala(salas[0]) : '';
     if (item.insuficiente){
       return cabecalhoSala + `
