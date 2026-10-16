@@ -1180,7 +1180,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v108';
+const APP_VERSION = 'v109';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -5450,7 +5450,7 @@ function renderMinersSobrando(poolMiners){
           <div class="cb-rank">${i + 1}</div>
           <div class="cb-info">
             <div class="name">${escapeHtml(nomeComNivel(m))}</div>
-            <div class="stats">${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s) · ${m.pode_vendido ? '<span class="tag-venda">Pode ser vendido</span>' : 'Não pode ser vendido'}</div>
+            <div class="stats">${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s) · ${m.pode_vendido ? '<span class="tag-venda">Pode ser vendido</span>' : 'Não pode ser vendido'}${m.valor !== null && m.valor !== undefined ? ' · VP ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
           </div>
           ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb" style="width:100px; height:50px; flex-shrink:0;">` : ''}
           <div class="cb-score">
