@@ -131,6 +131,7 @@
   main:has(#screen-catalogo-racks.active),
   main:has(#screen-miners.active),
   main:has(#screen-rack.active),
+  main:has(#screen-calculo.active),
   main:has(#screen-perfil.active),
   main:has(#screen-configuracao.active){max-width:var(--largura-padrao-telas);}
   .screen{display:none; animation:fade .25s ease;}
@@ -1180,7 +1181,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v110';
+const APP_VERSION = 'v111';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
