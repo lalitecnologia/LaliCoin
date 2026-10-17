@@ -1180,7 +1180,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v109';
+const APP_VERSION = 'v110';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -5219,6 +5219,7 @@ async function executarCalculoMelhorRack(){
       box.innerHTML = `<div class="card"><div class="empty-state">Calculando a distribuição… ${escapeHtml(texto)}</div></div>`;
     });
 
+  vpMinersCache = await buscarValoresPagosMiners();
   const valorFinalGeral = totalPowerDe(poderTotalGeral, colBonusGlobal, ganhoRacksGeral);
   const resultadosPorRack = porRack;
   const racksComResultado = resultadosPorRack.filter(item => item.resultado).length;
@@ -5428,6 +5429,20 @@ async function executarCalculoMelhorRack(){
 }
 
 // Lista, ao final do resultado, os miners que não couberam em nenhum rack (sem slot disponível)
+// v110 — VP (valor pago) vem direto do cadastro "Meus Miners" (tabela miners) do usuário logado,
+// buscado na hora do cálculo, indexado pelo id do miner
+let vpMinersCache = new Map();
+async function buscarValoresPagosMiners(){
+  const mapa = new Map();
+  myMiners.forEach(m => mapa.set(String(m.id), { valor: m.valor, moeda: m.moeda }));
+  try {
+    const { data, error } = await supabaseClient
+      .from('miners').select('id, valor, moeda').eq('user_id', currentUser.id);
+    if (!error && data) data.forEach(r => mapa.set(String(r.id), { valor: r.valor, moeda: r.moeda }));
+  } catch (e) { /* mantém os valores já carregados em myMiners */ }
+  return mapa;
+}
+
 function renderMinersSobrando(poolMiners){
   if (!poolMiners.length) return '';
 
@@ -5450,7 +5465,7 @@ function renderMinersSobrando(poolMiners){
           <div class="cb-rank">${i + 1}</div>
           <div class="cb-info">
             <div class="name">${escapeHtml(nomeComNivel(m))}</div>
-            <div class="stats">${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s) · ${m.pode_vendido ? '<span class="tag-venda">Pode ser vendido</span>' : 'Não pode ser vendido'}${m.valor !== null && m.valor !== undefined ? ' · VP ' + fmtValorCompleto(m.valor) + ' ' + (m.moeda || 'RST') : ''}</div>
+            <div class="stats">${fmtNum(m.poder)} ${m.unidade || 'H/s'} · Bônus ${fmtNum(m.bonus)}% · ${m.slots_ocupados ?? 1} slot(s) · ${m.pode_vendido ? '<span class="tag-venda">Pode ser vendido</span>' : 'Não pode ser vendido'}${(() => { const vp = vpMinersCache.get(String(m.id)) || { valor: m.valor, moeda: m.moeda }; return vp.valor !== null && vp.valor !== undefined ? ' · VP ' + fmtValorCompleto(vp.valor) + ' ' + (vp.moeda || m.moeda || 'RST') : ''; })()}</div>
           </div>
           ${m.foto ? `<img src="${m.foto}" alt="" class="miner-thumb" style="width:100px; height:50px; flex-shrink:0;">` : ''}
           <div class="cb-score">
