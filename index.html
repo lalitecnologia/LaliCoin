@@ -444,6 +444,17 @@
   .tema-nome{font-weight:600; font-size:14px; color:var(--text);}
   .tema-desc{font-size:12px; color:var(--muted); margin-top:2px;}
 
+  /* v112 — filtros rápidos da lista "Meus miners" (chips de 1 clique) */
+  .filtros-miners{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 12px;}
+  .filtro-chip{
+    background:var(--surface-2); color:var(--muted); border:1px solid var(--border);
+    border-radius:999px; padding:6px 14px; font-size:12.5px; font-weight:500; cursor:pointer;
+    font-family:inherit; transition:all .15s;
+  }
+  .filtro-chip:hover{color:var(--text); border-color:var(--teal);}
+  .filtro-chip.ativo{color:var(--teal); border-color:var(--teal); background:rgba(62,198,192,0.10); font-weight:600;}
+  .filtros-miners .filtro-info{font-size:12px; color:var(--muted); margin-left:auto;}
+
   .cb-row{
     display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);
   }
@@ -803,6 +814,7 @@
           <span>Meus miners <span id="contador-miners" class="counter-badge" title="Total de miners">0</span> <span style="font-size:12px; font-weight:400; color:var(--muted);">Ativos</span> <span id="contador-miners-ativos" class="counter-badge" title="Miners ativos">0</span></span>
           <button type="button" class="btn btn-ghost" style="width:auto; padding:6px 14px; font-size:12px;" onclick="exportarMinersTxt()">Exportar .txt</button>
         </div>
+        <div id="filtros-meus-miners" class="filtros-miners"></div>
         <div id="miners-list"><div class="empty-state">Nenhum minerador vinculado ainda.</div></div>
       </div>
     </section>
@@ -1181,7 +1193,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v111';
+const APP_VERSION = 'v112';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3212,6 +3224,32 @@ async function loadMiners(){
 
 let editingMinerId = null;
 
+// v112 — filtros da lista "Meus miners". Pra criar um filtro novo é só adicionar um item aqui
+// (id, rótulo e a função que decide se o miner entra na lista); o botão aparece sozinho.
+const FILTROS_MEUS_MINERS = [
+  { id: 'todos',    label: 'Todos',            fn: () => true },
+  { id: 'vendidos', label: 'Pode ser vendido', fn: m => !!m.pode_vendido },
+  // exemplos para o futuro:
+  // { id: 'inativos',  label: 'Inativos',      fn: m => m.ativo === false },
+  // { id: 'sem-valor', label: 'Sem VP',        fn: m => !(Number(m.valor) > 0) },
+];
+let filtroMeusMiners = 'todos';
+
+function setFiltroMeusMiners(id){
+  filtroMeusMiners = id;
+  renderMiners();
+}
+
+function renderFiltrosMeusMiners(totalFiltrado){
+  const box = document.getElementById('filtros-meus-miners');
+  if (!box) return;
+  const info = filtroMeusMiners !== 'todos'
+    ? `<span class="filtro-info">Mostrando ${totalFiltrado} de ${myMiners.length}</span>` : '';
+  box.innerHTML = FILTROS_MEUS_MINERS.map(f =>
+    `<button type="button" class="filtro-chip${f.id === filtroMeusMiners ? ' ativo' : ''}" onclick="setFiltroMeusMiners('${f.id}')">${f.label}</button>`
+  ).join('') + info;
+}
+
 function renderMiners(){
   const contador = document.getElementById('contador-miners');
   if (contador) contador.textContent = myMiners.length;
@@ -3221,10 +3259,19 @@ function renderMiners(){
 
   const list = document.getElementById('miners-list');
   if (!myMiners.length){
+    const boxFiltros = document.getElementById('filtros-meus-miners');
+    if (boxFiltros) boxFiltros.innerHTML = '';
     list.innerHTML = '<div class="empty-state">Nenhum minerador vinculado ainda.</div>';
     return;
   }
-  const minersOrdenados = [...myMiners].sort((a, b) => {
+  const filtroAtual = FILTROS_MEUS_MINERS.find(f => f.id === filtroMeusMiners) || FILTROS_MEUS_MINERS[0];
+  const minersFiltrados = myMiners.filter(filtroAtual.fn);
+  renderFiltrosMeusMiners(minersFiltrados.length);
+  if (!minersFiltrados.length){
+    list.innerHTML = '<div class="empty-state">Nenhum minerador encontrado com esse filtro.</div>';
+    return;
+  }
+  const minersOrdenados = [...minersFiltrados].sort((a, b) => {
     const nomeA = (a.nome || '').toLowerCase();
     const nomeB = (b.nome || '').toLowerCase();
     if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
