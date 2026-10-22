@@ -453,6 +453,9 @@
   }
   .filtro-chip:hover{color:var(--text); border-color:var(--teal);}
   .filtro-chip.ativo{color:var(--teal); border-color:var(--teal); background:rgba(62,198,192,0.10); font-weight:600;}
+  .filtros-miners{flex-direction:column; align-items:stretch;}
+  .filtros-miners .filtros-grupo{display:flex; flex-wrap:wrap; align-items:center; gap:8px;}
+  .filtros-miners .filtro-rotulo{font-size:12px; color:var(--muted); margin-right:2px;}
   .filtros-miners .filtro-info{font-size:12px; color:var(--muted); margin-left:auto;}
 
   .cb-row{
@@ -1193,7 +1196,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v112';
+const APP_VERSION = 'v113';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3235,6 +3238,26 @@ const FILTROS_MEUS_MINERS = [
 ];
 let filtroMeusMiners = 'todos';
 
+// v113 — ordens da lista "Meus miners". Pra criar uma ordem nova é só adicionar um item aqui
+// (id, rótulo e a função de comparação); o botão aparece sozinho.
+const cmpNomeMiner = (a, b) => (a.nome || '').toLowerCase().localeCompare((b.nome || '').toLowerCase(), 'pt-BR');
+const ORDENS_MEUS_MINERS = [
+  { id: 'nome',        label: 'Nome',         fn: (a, b) => {
+      const n = cmpNomeMiner(a, b); if (n) return n;
+      return (poderHsAtual(b) - poderHsAtual(a)) || (Number(b.bonus) - Number(a.bonus));
+  } },
+  { id: 'poder-desc',  label: 'Maior poder',  fn: (a, b) => (poderHsAtual(b) - poderHsAtual(a)) || (Number(b.bonus) - Number(a.bonus)) || cmpNomeMiner(a, b) },
+  { id: 'poder-asc',   label: 'Menor poder',  fn: (a, b) => (poderHsAtual(a) - poderHsAtual(b)) || (Number(a.bonus) - Number(b.bonus)) || cmpNomeMiner(a, b) },
+  { id: 'bonus-desc',  label: 'Maior bônus',  fn: (a, b) => (Number(b.bonus) - Number(a.bonus)) || (poderHsAtual(b) - poderHsAtual(a)) || cmpNomeMiner(a, b) },
+  { id: 'bonus-asc',   label: 'Menor bônus',  fn: (a, b) => (Number(a.bonus) - Number(b.bonus)) || (poderHsAtual(a) - poderHsAtual(b)) || cmpNomeMiner(a, b) },
+];
+let ordemMeusMiners = 'nome';
+
+function setOrdemMeusMiners(id){
+  ordemMeusMiners = id;
+  renderMiners();
+}
+
 function setFiltroMeusMiners(id){
   filtroMeusMiners = id;
   renderMiners();
@@ -3245,9 +3268,14 @@ function renderFiltrosMeusMiners(totalFiltrado){
   if (!box) return;
   const info = filtroMeusMiners !== 'todos'
     ? `<span class="filtro-info">Mostrando ${totalFiltrado} de ${myMiners.length}</span>` : '';
-  box.innerHTML = FILTROS_MEUS_MINERS.map(f =>
+  const chipsFiltro = FILTROS_MEUS_MINERS.map(f =>
     `<button type="button" class="filtro-chip${f.id === filtroMeusMiners ? ' ativo' : ''}" onclick="setFiltroMeusMiners('${f.id}')">${f.label}</button>`
-  ).join('') + info;
+  ).join('');
+  const chipsOrdem = ORDENS_MEUS_MINERS.map(o =>
+    `<button type="button" class="filtro-chip${o.id === ordemMeusMiners ? ' ativo' : ''}" onclick="setOrdemMeusMiners('${o.id}')">${o.label}</button>`
+  ).join('');
+  box.innerHTML = `<div class="filtros-grupo">${chipsFiltro}${info}</div>
+    <div class="filtros-grupo"><span class="filtro-rotulo">Ordenar</span>${chipsOrdem}</div>`;
 }
 
 function renderMiners(){
@@ -3271,17 +3299,8 @@ function renderMiners(){
     list.innerHTML = '<div class="empty-state">Nenhum minerador encontrado com esse filtro.</div>';
     return;
   }
-  const minersOrdenados = [...minersFiltrados].sort((a, b) => {
-    const nomeA = (a.nome || '').toLowerCase();
-    const nomeB = (b.nome || '').toLowerCase();
-    if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
-
-    const poderA = poderHsAtual(a);
-    const poderB = poderHsAtual(b);
-    if (poderA !== poderB) return poderB - poderA;
-
-    return Number(b.bonus) - Number(a.bonus);
-  });
+  const ordemAtual = ORDENS_MEUS_MINERS.find(o => o.id === ordemMeusMiners) || ORDENS_MEUS_MINERS[0];
+  const minersOrdenados = [...minersFiltrados].sort(ordemAtual.fn);
   list.innerHTML = minersOrdenados.map(m => {
     if (m.id === editingMinerId){
       const opcoesMoedaEdit = opcoesMoeda(m.moeda || 'RST');
