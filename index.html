@@ -456,6 +456,10 @@
   .filtros-miners{flex-direction:column; align-items:stretch;}
   .filtros-miners .filtros-grupo{display:flex; flex-wrap:wrap; align-items:center; gap:8px;}
   .filtros-miners .filtro-rotulo{font-size:12px; color:var(--muted); margin-right:2px;}
+  .filtros-miners .filtros-sub{display:inline-flex; flex-wrap:wrap; gap:8px;}
+  .filtros-miners .filtros-sep{width:1px; height:20px; background:var(--border); margin:0 4px;}
+  .filtro-limpar{background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:6px 4px; font-family:inherit;}
+  .filtro-limpar:hover{color:var(--text); text-decoration:underline;}
   .filtros-miners .filtro-info{font-size:12px; color:var(--muted); margin-left:auto;}
 
   .cb-row{
@@ -1196,7 +1200,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v114';
+const APP_VERSION = 'v115';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3227,17 +3231,68 @@ async function loadMiners(){
 
 let editingMinerId = null;
 
-// v112 — filtros da lista "Meus miners". Pra criar um filtro novo é só adicionar um item aqui
-// (id, rótulo e a função que decide se o miner entra na lista); o botão aparece sozinho.
+// v115 — filtros combináveis da lista "Meus miners" (chips que ligam/desligam; os ligados se somam).
+// Pra criar um filtro novo é só adicionar um item em FILTROS_MEUS_MINERS (id, rótulo, grupo e a regra);
+// o botão aparece sozinho. Grupos "exclusivos" aceitam só um marcado por vez (ex.: Ativos x Inativos).
+const GRUPOS_FILTROS_MEUS_MINERS = {
+  status: { exclusivo: true,  rotuloTodos: 'Todos' },
+  venda:  { exclusivo: false },
+};
 const FILTROS_MEUS_MINERS = [
-  { id: 'todos',    label: 'Todos',            fn: () => true },
-  { id: 'vendidos', label: 'Pode ser vendido', fn: m => !!m.pode_vendido },
-  { id: 'ativos',   label: 'Ativos',           fn: m => m.ativo !== false },
-  { id: 'inativos', label: 'Inativos',         fn: m => m.ativo === false },
+  { id: 'ativos',   label: 'Ativos',           grupo: 'status', fn: m => m.ativo !== false },
+  { id: 'inativos', label: 'Inativos',         grupo: 'status', fn: m => m.ativo === false },
+  { id: 'vendidos', label: 'Pode ser vendido', grupo: 'venda',  fn: m => !!m.pode_vendido },
   // exemplo para o futuro:
-  // { id: 'sem-valor', label: 'Sem VP',        fn: m => !(Number(m.valor) > 0) },
+  // { id: 'sem-valor', label: 'Sem VP',        grupo: 'venda',  fn: m => !(Number(m.valor) > 0) },
 ];
-let filtroMeusMiners = 'todos';
+const filtrosMeusMiners = new Set();
+
+function toggleFiltroMeusMiners(id){
+  const f = FILTROS_MEUS_MINERS.find(x => x.id === id);
+  if (!f) return;
+  if (filtrosMeusMiners.has(id)) {
+    filtrosMeusMiners.delete(id);
+  } else {
+    if (GRUPOS_FILTROS_MEUS_MINERS[f.grupo]?.exclusivo) {
+      FILTROS_MEUS_MINERS.filter(x => x.grupo === f.grupo).forEach(x => filtrosMeusMiners.delete(x.id));
+    }
+    filtrosMeusMiners.add(id);
+  }
+  renderMiners();
+}
+
+function limparGrupoFiltroMeusMiners(grupo){
+  FILTROS_MEUS_MINERS.filter(x => x.grupo === grupo).forEach(x => filtrosMeusMiners.delete(x.id));
+  renderMiners();
+}
+
+function limparFiltrosMeusMiners(){
+  filtrosMeusMiners.clear();
+  renderMiners();
+}
+
+function renderFiltrosMeusMiners(totalFiltrado){
+  const box = document.getElementById('filtros-meus-miners');
+  if (!box) return;
+  const chip = (ativo, label, onclick) =>
+    `<button type="button" class="filtro-chip${ativo ? ' ativo' : ''}" onclick="${onclick}">${label}</button>`;
+  const grupos = Object.keys(GRUPOS_FILTROS_MEUS_MINERS).map(g => {
+    const cfg = GRUPOS_FILTROS_MEUS_MINERS[g];
+    const itens = FILTROS_MEUS_MINERS.filter(f => f.grupo === g);
+    if (!itens.length) return '';
+    const algumMarcado = itens.some(f => filtrosMeusMiners.has(f.id));
+    const chipTodos = cfg.exclusivo ? chip(!algumMarcado, cfg.rotuloTodos || 'Todos', `limparGrupoFiltroMeusMiners('${g}')`) : '';
+    return `<span class="filtros-sub">${chipTodos}${itens.map(f => chip(filtrosMeusMiners.has(f.id), f.label, `toggleFiltroMeusMiners('${f.id}')`)).join('')}</span>`;
+  }).join('<span class="filtros-sep"></span>');
+  const temFiltro = filtrosMeusMiners.size > 0;
+  const limpar = temFiltro ? `<button type="button" class="filtro-limpar" onclick="limparFiltrosMeusMiners()">✕ Limpar filtros</button>` : '';
+  const info = temFiltro ? `<span class="filtro-info">Mostrando ${totalFiltrado} de ${myMiners.length}</span>` : '';
+  const chipsOrdem = ORDENS_MEUS_MINERS.map(o =>
+    `<button type="button" class="filtro-chip${o.id === ordemMeusMiners ? ' ativo' : ''}" onclick="setOrdemMeusMiners('${o.id}')">${o.label}</button>`
+  ).join('');
+  box.innerHTML = `<div class="filtros-grupo">${grupos}${limpar}${info}</div>
+    <div class="filtros-grupo"><span class="filtro-rotulo">Ordenar</span>${chipsOrdem}</div>`;
+}
 
 // v113 — ordens da lista "Meus miners". Pra criar uma ordem nova é só adicionar um item aqui
 // (id, rótulo e a função de comparação); o botão aparece sozinho.
@@ -3259,26 +3314,6 @@ function setOrdemMeusMiners(id){
   renderMiners();
 }
 
-function setFiltroMeusMiners(id){
-  filtroMeusMiners = id;
-  renderMiners();
-}
-
-function renderFiltrosMeusMiners(totalFiltrado){
-  const box = document.getElementById('filtros-meus-miners');
-  if (!box) return;
-  const info = filtroMeusMiners !== 'todos'
-    ? `<span class="filtro-info">Mostrando ${totalFiltrado} de ${myMiners.length}</span>` : '';
-  const chipsFiltro = FILTROS_MEUS_MINERS.map(f =>
-    `<button type="button" class="filtro-chip${f.id === filtroMeusMiners ? ' ativo' : ''}" onclick="setFiltroMeusMiners('${f.id}')">${f.label}</button>`
-  ).join('');
-  const chipsOrdem = ORDENS_MEUS_MINERS.map(o =>
-    `<button type="button" class="filtro-chip${o.id === ordemMeusMiners ? ' ativo' : ''}" onclick="setOrdemMeusMiners('${o.id}')">${o.label}</button>`
-  ).join('');
-  box.innerHTML = `<div class="filtros-grupo">${chipsFiltro}${info}</div>
-    <div class="filtros-grupo"><span class="filtro-rotulo">Ordenar</span>${chipsOrdem}</div>`;
-}
-
 function renderMiners(){
   const contador = document.getElementById('contador-miners');
   if (contador) contador.textContent = myMiners.length;
@@ -3293,8 +3328,8 @@ function renderMiners(){
     list.innerHTML = '<div class="empty-state">Nenhum minerador vinculado ainda.</div>';
     return;
   }
-  const filtroAtual = FILTROS_MEUS_MINERS.find(f => f.id === filtroMeusMiners) || FILTROS_MEUS_MINERS[0];
-  const minersFiltrados = myMiners.filter(filtroAtual.fn);
+  const filtrosAtivos = FILTROS_MEUS_MINERS.filter(f => filtrosMeusMiners.has(f.id));
+  const minersFiltrados = myMiners.filter(m => filtrosAtivos.every(f => f.fn(m)));
   renderFiltrosMeusMiners(minersFiltrados.length);
   if (!minersFiltrados.length){
     list.innerHTML = '<div class="empty-state">Nenhum minerador encontrado com esse filtro.</div>';
