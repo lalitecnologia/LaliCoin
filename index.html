@@ -1196,7 +1196,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v113';
+const APP_VERSION = 'v114';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3232,8 +3232,9 @@ let editingMinerId = null;
 const FILTROS_MEUS_MINERS = [
   { id: 'todos',    label: 'Todos',            fn: () => true },
   { id: 'vendidos', label: 'Pode ser vendido', fn: m => !!m.pode_vendido },
-  // exemplos para o futuro:
-  // { id: 'inativos',  label: 'Inativos',      fn: m => m.ativo === false },
+  { id: 'ativos',   label: 'Ativos',           fn: m => m.ativo !== false },
+  { id: 'inativos', label: 'Inativos',         fn: m => m.ativo === false },
+  // exemplo para o futuro:
   // { id: 'sem-valor', label: 'Sem VP',        fn: m => !(Number(m.valor) > 0) },
 ];
 let filtroMeusMiners = 'todos';
