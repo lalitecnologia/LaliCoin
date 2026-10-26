@@ -699,6 +699,7 @@
       <div class="card">
         <div class="section-title">Miners cadastrados <span id="contador-catalogo-miners" class="counter-badge">0</span></div>
         <input type="text" id="cat-miner-busca" placeholder="Buscar pelo nome..." oninput="renderCatalogoMiners()" style="margin-bottom:12px;">
+        <div id="filtros-catalogo-miners" class="filtros-miners"></div>
         <div id="catalogo-miners-list"><div class="empty-state">Nenhum minerador cadastrado ainda.</div></div>
       </div>
     </section>
@@ -750,6 +751,7 @@
       <div class="card">
         <div class="section-title">Racks cadastrados <span id="contador-catalogo-racks" class="counter-badge">0</span></div>
         <input type="text" id="cat-rack-busca" placeholder="Buscar pelo nome..." oninput="renderCatalogoRacks()" style="margin-bottom:12px;">
+        <div id="filtros-catalogo-racks" class="filtros-miners"></div>
         <div id="catalogo-racks-list"><div class="empty-state">Nenhum rack cadastrado ainda.</div></div>
       </div>
     </section>
@@ -887,6 +889,7 @@
           <span>Meus racks <span id="contador-racks" class="counter-badge" title="Total de racks">0</span> <span style="font-size:12px; font-weight:400; color:var(--muted);">Ativos</span> <span id="contador-racks-ativos" class="counter-badge" title="Racks ativos">0</span></span>
           <button type="button" class="btn btn-ghost" style="width:auto; padding:6px 14px; font-size:12px;" onclick="exportarRacksTxt()">Exportar .txt</button>
         </div>
+        <div id="filtros-meus-racks" class="filtros-miners"></div>
         <div id="racks-list"><div class="empty-state">Nenhum rack vinculado ainda.</div></div>
       </div>
     </section>
@@ -1200,7 +1203,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v116';
+const APP_VERSION = 'v117';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2831,7 +2834,8 @@ function renderCatalogoMiners(){
   if (contador) contador.textContent = catalogoMiners.length;
 
   const filtro = (document.getElementById('cat-miner-busca')?.value || '').trim().toLowerCase();
-  const lista = catalogoMiners.filter(c => c.nome.toLowerCase().includes(filtro));
+  const lista = LF('catalogo-miners').aplicar(catalogoMiners.filter(c => c.nome.toLowerCase().includes(filtro)));
+  LF('catalogo-miners').desenhar(lista.length, catalogoMiners.length);
 
   const list = document.getElementById('catalogo-miners-list');
   if (!lista.length){
@@ -3046,7 +3050,8 @@ function renderCatalogoRacks(){
   if (contador) contador.textContent = catalogoRacks.length;
 
   const filtro = (document.getElementById('cat-rack-busca')?.value || '').trim().toLowerCase();
-  const lista = catalogoRacks.filter(c => c.nome.toLowerCase().includes(filtro));
+  const lista = LF('catalogo-racks').aplicar(catalogoRacks.filter(c => c.nome.toLowerCase().includes(filtro)));
+  LF('catalogo-racks').desenhar(lista.length, catalogoRacks.length);
 
   const list = document.getElementById('catalogo-racks-list');
   if (!lista.length){
@@ -3231,90 +3236,112 @@ async function loadMiners(){
 
 let editingMinerId = null;
 
-// v115 — filtros combináveis da lista "Meus miners" (chips que ligam/desligam; os ligados se somam).
-// Pra criar um filtro novo é só adicionar um item em FILTROS_MEUS_MINERS (id, rótulo, grupo e a regra);
-// o botão aparece sozinho. Grupos "exclusivos" aceitam só um marcado por vez (ex.: Ativos x Inativos).
-const GRUPOS_FILTROS_MEUS_MINERS = {
+// v117 — componente único de filtros + ordens (padrão compartilhado por Meus miners, Meus racks,
+// Cadastro de miners e Cadastro de racks). Chips ligam/desligam, os filtros ligados se somam;
+// grupos "exclusivos" aceitam só um marcado por vez (ex.: Ativos x Inativos).
+// Pra criar filtro/ordem nova é só adicionar uma linha na config da lista; o botão aparece sozinho.
+const LISTAS_FILTRAVEIS = {};
+function LF(chave){ return LISTAS_FILTRAVEIS[chave]; }
+
+function criarListaFiltravel({ chave, boxId, grupos, filtros, ordens, onChange }){
+  const estado = { filtros: new Set(), ordem: ordens[0].id };
+  const api = {
+    toggle(id){
+      const f = filtros.find(x => x.id === id);
+      if (!f) return;
+      if (estado.filtros.has(id)) {
+        estado.filtros.delete(id);
+      } else {
+        if (grupos[f.grupo]?.exclusivo) filtros.filter(x => x.grupo === f.grupo).forEach(x => estado.filtros.delete(x.id));
+        estado.filtros.add(id);
+      }
+      onChange();
+    },
+    limparGrupo(g){ filtros.filter(x => x.grupo === g).forEach(x => estado.filtros.delete(x.id)); onChange(); },
+    limpar(){ estado.filtros.clear(); onChange(); },
+    setOrdem(id){ estado.ordem = id; onChange(); },
+    temFiltro(){ return estado.filtros.size > 0; },
+    // aplica filtros ligados + ordem escolhida
+    aplicar(lista){
+      const ativos = filtros.filter(f => estado.filtros.has(f.id));
+      const ord = ordens.find(o => o.id === estado.ordem) || ordens[0];
+      return lista.filter(m => ativos.every(f => f.fn(m))).sort(ord.fn);
+    },
+    limparBox(){
+      const box = document.getElementById(boxId);
+      if (box) box.innerHTML = '';
+    },
+    desenhar(totalFiltrado, totalGeral){
+      const box = document.getElementById(boxId);
+      if (!box) return;
+      const chip = (ativo, label, onclick) =>
+        `<button type="button" class="filtro-chip${ativo ? ' ativo' : ''}" onclick="${onclick}">${label}</button>`;
+      const blocos = Object.keys(grupos).map(g => {
+        const cfg = grupos[g];
+        const itens = filtros.filter(f => f.grupo === g);
+        if (!itens.length) return '';
+        const algumMarcado = itens.some(f => estado.filtros.has(f.id));
+        const rotulo = cfg.rotulo ? `<span class="filtro-rotulo">${cfg.rotulo}</span>` : '';
+        const chipTodos = cfg.exclusivo ? chip(!algumMarcado, cfg.rotuloTodos || 'Todos', `LF('${chave}').limparGrupo('${g}')`) : '';
+        return `<span class="filtros-sub">${rotulo}${chipTodos}${itens.map(f => chip(estado.filtros.has(f.id), f.label, `LF('${chave}').toggle('${f.id}')`)).join('')}</span>`;
+      }).filter(Boolean).join('<span class="filtros-sep"></span>');
+      const temFiltro = estado.filtros.size > 0;
+      const limpar = temFiltro ? `<button type="button" class="filtro-limpar" onclick="LF('${chave}').limpar()">✕ Limpar filtros</button>` : '';
+      const info = temFiltro ? `<span class="filtro-info">Mostrando ${totalFiltrado} de ${totalGeral}</span>` : '';
+      const chipsOrdem = ordens.map(o => chip(o.id === estado.ordem, o.label, `LF('${chave}').setOrdem('${o.id}')`)).join('');
+      box.innerHTML = `<div class="filtros-grupo">${blocos}${limpar}${info}</div>
+        <div class="filtros-grupo"><span class="filtro-rotulo">Ordenar</span>${chipsOrdem}</div>`;
+    },
+  };
+  LISTAS_FILTRAVEIS[chave] = api;
+  return api;
+}
+
+// ---- comparadores compartilhados (nome ignora maiúsculas/acentos; nível em algarismo romano) ----
+const cmpTexto = (x, y) => String(x || '').trim().localeCompare(String(y || '').trim(), 'pt-BR', { sensitivity: 'base', numeric: true });
+const cmpNomeMiner = (a, b) => cmpTexto(a.nome, b.nome) || (NIVEIS_ROMANOS.indexOf(a.nivel) - NIVEIS_ROMANOS.indexOf(b.nivel));
+const cmpNum = (x, y) => (Number(x) || 0) - (Number(y) || 0);
+
+// ---- Venda (compartilhado entre miners e racks) ----
+const FILTROS_VENDA = [
+  { id: 'vendidos',     label: 'Pode ser vendido',     grupo: 'venda', fn: m => !!m.pode_vendido },
+  { id: 'nao-vendidos', label: 'Não pode ser vendido', grupo: 'venda', fn: m => !m.pode_vendido },
+];
+const FILTROS_STATUS = [
+  { id: 'ativos',   label: 'Ativos',   grupo: 'status', fn: m => m.ativo !== false },
+  { id: 'inativos', label: 'Inativos', grupo: 'status', fn: m => m.ativo === false },
+];
+const GRUPOS_STATUS_VENDA = {
   status: { exclusivo: true, rotulo: 'Status', rotuloTodos: 'Todos' },
   venda:  { exclusivo: true, rotulo: 'Venda',  rotuloTodos: 'Todos' },
 };
-const FILTROS_MEUS_MINERS = [
-  { id: 'ativos',   label: 'Ativos',           grupo: 'status', fn: m => m.ativo !== false },
-  { id: 'inativos', label: 'Inativos',         grupo: 'status', fn: m => m.ativo === false },
-  { id: 'vendidos',     label: 'Pode ser vendido',     grupo: 'venda',  fn: m => !!m.pode_vendido },
-  { id: 'nao-vendidos', label: 'Não pode ser vendido', grupo: 'venda',  fn: m => !m.pode_vendido },
-  // exemplo para o futuro (grupo novo: criar também em GRUPOS_FILTROS_MEUS_MINERS):
-  // { id: 'sem-valor', label: 'Sem VP',        grupo: 'valor',  fn: m => !(Number(m.valor) > 0) },
+const GRUPOS_SO_VENDA = { venda: GRUPOS_STATUS_VENDA.venda };
+
+// ---- Ordens de miners (Meus miners e Cadastro de miners) ----
+const ORDENS_MINERS = [
+  { id: 'nome',       label: 'Nome',        fn: (a, b) => cmpNomeMiner(a, b) || (poderHsAtual(b) - poderHsAtual(a)) || cmpNum(b.bonus, a.bonus) },
+  { id: 'poder-desc', label: 'Maior poder', fn: (a, b) => (poderHsAtual(b) - poderHsAtual(a)) || cmpNum(b.bonus, a.bonus) || cmpNomeMiner(a, b) },
+  { id: 'poder-asc',  label: 'Menor poder', fn: (a, b) => (poderHsAtual(a) - poderHsAtual(b)) || cmpNum(a.bonus, b.bonus) || cmpNomeMiner(a, b) },
+  { id: 'bonus-desc', label: 'Maior bônus', fn: (a, b) => cmpNum(b.bonus, a.bonus) || (poderHsAtual(b) - poderHsAtual(a)) || cmpNomeMiner(a, b) },
+  { id: 'bonus-asc',  label: 'Menor bônus', fn: (a, b) => cmpNum(a.bonus, b.bonus) || (poderHsAtual(a) - poderHsAtual(b)) || cmpNomeMiner(a, b) },
 ];
-const filtrosMeusMiners = new Set();
 
-function toggleFiltroMeusMiners(id){
-  const f = FILTROS_MEUS_MINERS.find(x => x.id === id);
-  if (!f) return;
-  if (filtrosMeusMiners.has(id)) {
-    filtrosMeusMiners.delete(id);
-  } else {
-    if (GRUPOS_FILTROS_MEUS_MINERS[f.grupo]?.exclusivo) {
-      FILTROS_MEUS_MINERS.filter(x => x.grupo === f.grupo).forEach(x => filtrosMeusMiners.delete(x.id));
-    }
-    filtrosMeusMiners.add(id);
-  }
-  renderMiners();
-}
-
-function limparGrupoFiltroMeusMiners(grupo){
-  FILTROS_MEUS_MINERS.filter(x => x.grupo === grupo).forEach(x => filtrosMeusMiners.delete(x.id));
-  renderMiners();
-}
-
-function limparFiltrosMeusMiners(){
-  filtrosMeusMiners.clear();
-  renderMiners();
-}
-
-function renderFiltrosMeusMiners(totalFiltrado){
-  const box = document.getElementById('filtros-meus-miners');
-  if (!box) return;
-  const chip = (ativo, label, onclick) =>
-    `<button type="button" class="filtro-chip${ativo ? ' ativo' : ''}" onclick="${onclick}">${label}</button>`;
-  const grupos = Object.keys(GRUPOS_FILTROS_MEUS_MINERS).map(g => {
-    const cfg = GRUPOS_FILTROS_MEUS_MINERS[g];
-    const itens = FILTROS_MEUS_MINERS.filter(f => f.grupo === g);
-    if (!itens.length) return '';
-    const algumMarcado = itens.some(f => filtrosMeusMiners.has(f.id));
-    const chipTodos = cfg.exclusivo ? chip(!algumMarcado, cfg.rotuloTodos || 'Todos', `limparGrupoFiltroMeusMiners('${g}')`) : '';
-    const rotuloGrupo = cfg.rotulo ? `<span class="filtro-rotulo">${cfg.rotulo}</span>` : '';
-    return `<span class="filtros-sub">${rotuloGrupo}${chipTodos}${itens.map(f => chip(filtrosMeusMiners.has(f.id), f.label, `toggleFiltroMeusMiners('${f.id}')`)).join('')}</span>`;
-  }).join('<span class="filtros-sep"></span>');
-  const temFiltro = filtrosMeusMiners.size > 0;
-  const limpar = temFiltro ? `<button type="button" class="filtro-limpar" onclick="limparFiltrosMeusMiners()">✕ Limpar filtros</button>` : '';
-  const info = temFiltro ? `<span class="filtro-info">Mostrando ${totalFiltrado} de ${myMiners.length}</span>` : '';
-  const chipsOrdem = ORDENS_MEUS_MINERS.map(o =>
-    `<button type="button" class="filtro-chip${o.id === ordemMeusMiners ? ' ativo' : ''}" onclick="setOrdemMeusMiners('${o.id}')">${o.label}</button>`
-  ).join('');
-  box.innerHTML = `<div class="filtros-grupo">${grupos}${limpar}${info}</div>
-    <div class="filtros-grupo"><span class="filtro-rotulo">Ordenar</span>${chipsOrdem}</div>`;
-}
-
-// v113 — ordens da lista "Meus miners". Pra criar uma ordem nova é só adicionar um item aqui
-// (id, rótulo e a função de comparação); o botão aparece sozinho.
-const cmpNomeMiner = (a, b) => (a.nome || '').toLowerCase().localeCompare((b.nome || '').toLowerCase(), 'pt-BR');
-const ORDENS_MEUS_MINERS = [
-  { id: 'nome',        label: 'Nome',         fn: (a, b) => {
-      const n = cmpNomeMiner(a, b); if (n) return n;
-      return (poderHsAtual(b) - poderHsAtual(a)) || (Number(b.bonus) - Number(a.bonus));
-  } },
-  { id: 'poder-desc',  label: 'Maior poder',  fn: (a, b) => (poderHsAtual(b) - poderHsAtual(a)) || (Number(b.bonus) - Number(a.bonus)) || cmpNomeMiner(a, b) },
-  { id: 'poder-asc',   label: 'Menor poder',  fn: (a, b) => (poderHsAtual(a) - poderHsAtual(b)) || (Number(a.bonus) - Number(b.bonus)) || cmpNomeMiner(a, b) },
-  { id: 'bonus-desc',  label: 'Maior bônus',  fn: (a, b) => (Number(b.bonus) - Number(a.bonus)) || (poderHsAtual(b) - poderHsAtual(a)) || cmpNomeMiner(a, b) },
-  { id: 'bonus-asc',   label: 'Menor bônus',  fn: (a, b) => (Number(a.bonus) - Number(b.bonus)) || (poderHsAtual(a) - poderHsAtual(b)) || cmpNomeMiner(a, b) },
+// ---- Ordens de racks (Meus racks e Cadastro de racks) ----
+const ORDENS_RACKS = [
+  { id: 'nome',        label: 'Nome',         fn: (a, b) => cmpTexto(a.nome, b.nome) || cmpNum(a.slots, b.slots) || cmpNum(b.bonus, a.bonus) },
+  { id: 'bonus-desc',  label: 'Maior bônus',  fn: (a, b) => cmpNum(b.bonus, a.bonus) || cmpNum(b.slots, a.slots) || cmpTexto(a.nome, b.nome) },
+  { id: 'bonus-asc',   label: 'Menor bônus',  fn: (a, b) => cmpNum(a.bonus, b.bonus) || cmpNum(a.slots, b.slots) || cmpTexto(a.nome, b.nome) },
+  { id: 'slots-desc',  label: 'Mais slots',   fn: (a, b) => cmpNum(b.slots, a.slots) || cmpNum(b.bonus, a.bonus) || cmpTexto(a.nome, b.nome) },
+  { id: 'slots-asc',   label: 'Menos slots',  fn: (a, b) => cmpNum(a.slots, b.slots) || cmpNum(a.bonus, b.bonus) || cmpTexto(a.nome, b.nome) },
 ];
-let ordemMeusMiners = 'nome';
 
-function setOrdemMeusMiners(id){
-  ordemMeusMiners = id;
-  renderMiners();
-}
+// exemplo para o futuro (filtro novo): { id: 'sem-valor', label: 'Sem VP', grupo: 'valor', fn: m => !(Number(m.valor) > 0) }
+// (grupo novo também precisa existir no objeto de grupos da lista)
+
+criarListaFiltravel({ chave: 'meus-miners',      boxId: 'filtros-meus-miners',      grupos: GRUPOS_STATUS_VENDA, filtros: [...FILTROS_STATUS, ...FILTROS_VENDA], ordens: ORDENS_MINERS, onChange: () => renderMiners() });
+criarListaFiltravel({ chave: 'meus-racks',       boxId: 'filtros-meus-racks',       grupos: GRUPOS_STATUS_VENDA, filtros: [...FILTROS_STATUS, ...FILTROS_VENDA], ordens: ORDENS_RACKS,  onChange: () => renderRacks() });
+criarListaFiltravel({ chave: 'catalogo-miners',  boxId: 'filtros-catalogo-miners',  grupos: GRUPOS_SO_VENDA,     filtros: FILTROS_VENDA,                          ordens: ORDENS_MINERS, onChange: () => renderCatalogoMiners() });
+criarListaFiltravel({ chave: 'catalogo-racks',   boxId: 'filtros-catalogo-racks',   grupos: GRUPOS_SO_VENDA,     filtros: FILTROS_VENDA,                          ordens: ORDENS_RACKS,  onChange: () => renderCatalogoRacks() });
 
 function renderMiners(){
   const contador = document.getElementById('contador-miners');
@@ -3325,20 +3352,16 @@ function renderMiners(){
 
   const list = document.getElementById('miners-list');
   if (!myMiners.length){
-    const boxFiltros = document.getElementById('filtros-meus-miners');
-    if (boxFiltros) boxFiltros.innerHTML = '';
+    LF('meus-miners').limparBox();
     list.innerHTML = '<div class="empty-state">Nenhum minerador vinculado ainda.</div>';
     return;
   }
-  const filtrosAtivos = FILTROS_MEUS_MINERS.filter(f => filtrosMeusMiners.has(f.id));
-  const minersFiltrados = myMiners.filter(m => filtrosAtivos.every(f => f.fn(m)));
-  renderFiltrosMeusMiners(minersFiltrados.length);
-  if (!minersFiltrados.length){
+  const minersOrdenados = LF('meus-miners').aplicar(myMiners);
+  LF('meus-miners').desenhar(minersOrdenados.length, myMiners.length);
+  if (!minersOrdenados.length){
     list.innerHTML = '<div class="empty-state">Nenhum minerador encontrado com esse filtro.</div>';
     return;
   }
-  const ordemAtual = ORDENS_MEUS_MINERS.find(o => o.id === ordemMeusMiners) || ORDENS_MEUS_MINERS[0];
-  const minersOrdenados = [...minersFiltrados].sort(ordemAtual.fn);
   list.innerHTML = minersOrdenados.map(m => {
     if (m.id === editingMinerId){
       const opcoesMoedaEdit = opcoesMoeda(m.moeda || 'RST');
@@ -3574,16 +3597,16 @@ function renderRacks(){
 
   const list = document.getElementById('racks-list');
   if (!myRacks.length){
+    LF('meus-racks').limparBox();
     list.innerHTML = '<div class="empty-state">Nenhum rack vinculado ainda.</div>';
     return;
   }
-  const racksOrdenados = [...myRacks].sort((a, b) => {
-    const nomeA = (a.nome || '').toLowerCase();
-    const nomeB = (b.nome || '').toLowerCase();
-    if (nomeA !== nomeB) return nomeA < nomeB ? -1 : 1;
-
-    return Number(b.bonus) - Number(a.bonus);
-  });
+  const racksOrdenados = LF('meus-racks').aplicar(myRacks);
+  LF('meus-racks').desenhar(racksOrdenados.length, myRacks.length);
+  if (!racksOrdenados.length){
+    list.innerHTML = '<div class="empty-state">Nenhum rack encontrado com esse filtro.</div>';
+    return;
+  }
   list.innerHTML = racksOrdenados.map(r => {
     if (r.id === editingRackId){
       const opcoesMoedaEdit = opcoesMoeda(r.moeda || 'RST');
