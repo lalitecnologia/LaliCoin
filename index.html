@@ -1200,7 +1200,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v115';
+const APP_VERSION = 'v116';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3235,15 +3235,16 @@ let editingMinerId = null;
 // Pra criar um filtro novo é só adicionar um item em FILTROS_MEUS_MINERS (id, rótulo, grupo e a regra);
 // o botão aparece sozinho. Grupos "exclusivos" aceitam só um marcado por vez (ex.: Ativos x Inativos).
 const GRUPOS_FILTROS_MEUS_MINERS = {
-  status: { exclusivo: true,  rotuloTodos: 'Todos' },
-  venda:  { exclusivo: false },
+  status: { exclusivo: true, rotulo: 'Status', rotuloTodos: 'Todos' },
+  venda:  { exclusivo: true, rotulo: 'Venda',  rotuloTodos: 'Todos' },
 };
 const FILTROS_MEUS_MINERS = [
   { id: 'ativos',   label: 'Ativos',           grupo: 'status', fn: m => m.ativo !== false },
   { id: 'inativos', label: 'Inativos',         grupo: 'status', fn: m => m.ativo === false },
-  { id: 'vendidos', label: 'Pode ser vendido', grupo: 'venda',  fn: m => !!m.pode_vendido },
-  // exemplo para o futuro:
-  // { id: 'sem-valor', label: 'Sem VP',        grupo: 'venda',  fn: m => !(Number(m.valor) > 0) },
+  { id: 'vendidos',     label: 'Pode ser vendido',     grupo: 'venda',  fn: m => !!m.pode_vendido },
+  { id: 'nao-vendidos', label: 'Não pode ser vendido', grupo: 'venda',  fn: m => !m.pode_vendido },
+  // exemplo para o futuro (grupo novo: criar também em GRUPOS_FILTROS_MEUS_MINERS):
+  // { id: 'sem-valor', label: 'Sem VP',        grupo: 'valor',  fn: m => !(Number(m.valor) > 0) },
 ];
 const filtrosMeusMiners = new Set();
 
@@ -3282,7 +3283,8 @@ function renderFiltrosMeusMiners(totalFiltrado){
     if (!itens.length) return '';
     const algumMarcado = itens.some(f => filtrosMeusMiners.has(f.id));
     const chipTodos = cfg.exclusivo ? chip(!algumMarcado, cfg.rotuloTodos || 'Todos', `limparGrupoFiltroMeusMiners('${g}')`) : '';
-    return `<span class="filtros-sub">${chipTodos}${itens.map(f => chip(filtrosMeusMiners.has(f.id), f.label, `toggleFiltroMeusMiners('${f.id}')`)).join('')}</span>`;
+    const rotuloGrupo = cfg.rotulo ? `<span class="filtro-rotulo">${cfg.rotulo}</span>` : '';
+    return `<span class="filtros-sub">${rotuloGrupo}${chipTodos}${itens.map(f => chip(filtrosMeusMiners.has(f.id), f.label, `toggleFiltroMeusMiners('${f.id}')`)).join('')}</span>`;
   }).join('<span class="filtros-sep"></span>');
   const temFiltro = filtrosMeusMiners.size > 0;
   const limpar = temFiltro ? `<button type="button" class="filtro-limpar" onclick="limparFiltrosMeusMiners()">✕ Limpar filtros</button>` : '';
