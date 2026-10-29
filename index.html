@@ -458,6 +458,8 @@
   .filtros-miners .filtro-rotulo{font-size:12px; color:var(--muted); margin-right:2px;}
   .filtros-miners .filtros-sub{display:inline-flex; flex-wrap:wrap; gap:8px;}
   .filtros-miners .filtros-sep{width:1px; height:20px; background:var(--border); margin:0 4px;}
+  .filtro-valor-input{width:90px; background:var(--surface-2); color:var(--text); border:1px solid var(--border); border-radius:999px; padding:6px 12px; font-size:12.5px; font-family:inherit; margin:0;}
+  .filtro-valor-input:focus{outline:none; border-color:var(--teal);}
   .filtro-limpar{background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; padding:6px 4px; font-family:inherit;}
   .filtro-limpar:hover{color:var(--text); text-decoration:underline;}
   .filtros-miners .filtro-info{font-size:12px; color:var(--muted); margin-left:auto;}
@@ -1203,7 +1205,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v117';
+const APP_VERSION = 'v118';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -3236,6 +3238,7 @@ async function loadMiners(){
 
 let editingMinerId = null;
 
+// v118 — filtro "Valor pago" (maior que / menor que) em Meus miners e Meus racks (opção valorPago: true).
 // v117 — componente único de filtros + ordens (padrão compartilhado por Meus miners, Meus racks,
 // Cadastro de miners e Cadastro de racks). Chips ligam/desligam, os filtros ligados se somam;
 // grupos "exclusivos" aceitam só um marcado por vez (ex.: Ativos x Inativos).
@@ -3243,8 +3246,16 @@ let editingMinerId = null;
 const LISTAS_FILTRAVEIS = {};
 function LF(chave){ return LISTAS_FILTRAVEIS[chave]; }
 
-function criarListaFiltravel({ chave, boxId, grupos, filtros, ordens, onChange }){
-  const estado = { filtros: new Set(), ordem: ordens[0].id };
+function criarListaFiltravel({ chave, boxId, grupos, filtros, ordens, onChange, valorPago = false }){
+  const estado = { filtros: new Set(), ordem: ordens[0].id, valorOp: null, valorRef: '' };
+  // v118 — filtro de Valor pago: só vale quando tem operador (maior/menor) E um número digitado
+  const valorRefNum = () => { const t = String(estado.valorRef).trim().replace(',', '.'); return t === '' || isNaN(Number(t)) ? null : Number(t); };
+  const valorAtivo = () => valorPago && !!estado.valorOp && valorRefNum() !== null;
+  const passaValor = m => {
+    if (m.valor === null || m.valor === undefined || m.valor === '') return false;
+    const v = Number(m.valor), ref = valorRefNum();
+    return estado.valorOp === 'maior' ? v > ref : v < ref;
+  };
   const api = {
     toggle(id){
       const f = filtros.find(x => x.id === id);
@@ -3258,14 +3269,16 @@ function criarListaFiltravel({ chave, boxId, grupos, filtros, ordens, onChange }
       onChange();
     },
     limparGrupo(g){ filtros.filter(x => x.grupo === g).forEach(x => estado.filtros.delete(x.id)); onChange(); },
-    limpar(){ estado.filtros.clear(); onChange(); },
+    limpar(){ estado.filtros.clear(); estado.valorOp = null; estado.valorRef = ''; onChange(); },
+    setValorOp(op){ estado.valorOp = estado.valorOp === op ? null : op; onChange(); },
+    setValorRef(v){ estado.valorRef = v; onChange(); },
     setOrdem(id){ estado.ordem = id; onChange(); },
-    temFiltro(){ return estado.filtros.size > 0; },
+    temFiltro(){ return estado.filtros.size > 0 || valorAtivo(); },
     // aplica filtros ligados + ordem escolhida
     aplicar(lista){
       const ativos = filtros.filter(f => estado.filtros.has(f.id));
       const ord = ordens.find(o => o.id === estado.ordem) || ordens[0];
-      return lista.filter(m => ativos.every(f => f.fn(m))).sort(ord.fn);
+      return lista.filter(m => ativos.every(f => f.fn(m)) && (!valorAtivo() || passaValor(m))).sort(ord.fn);
     },
     limparBox(){
       const box = document.getElementById(boxId);
@@ -3285,12 +3298,28 @@ function criarListaFiltravel({ chave, boxId, grupos, filtros, ordens, onChange }
         const chipTodos = cfg.exclusivo ? chip(!algumMarcado, cfg.rotuloTodos || 'Todos', `LF('${chave}').limparGrupo('${g}')`) : '';
         return `<span class="filtros-sub">${rotulo}${chipTodos}${itens.map(f => chip(estado.filtros.has(f.id), f.label, `LF('${chave}').toggle('${f.id}')`)).join('')}</span>`;
       }).filter(Boolean).join('<span class="filtros-sep"></span>');
-      const temFiltro = estado.filtros.size > 0;
+      // v118 — bloco do filtro Valor pago (chips Maior que / Menor que + campo numérico)
+      let blocoValor = '';
+      if (valorPago) {
+        const inputId = `filtro-valor-ref-${chave}`;
+        blocoValor = `<span class="filtros-sep"></span><span class="filtros-sub"><span class="filtro-rotulo">Valor pago</span>`
+          + chip(estado.valorOp === 'maior', 'Maior que', `LF('${chave}').setValorOp('maior')`)
+          + chip(estado.valorOp === 'menor', 'Menor que', `LF('${chave}').setValorOp('menor')`)
+          + `<input type="text" inputmode="decimal" id="${inputId}" class="filtro-valor-input" placeholder="valor" value="${String(estado.valorRef).replace(/"/g, '&quot;')}" oninput="LF('${chave}').setValorRef(this.value)"></span>`;
+      }
+      const temFiltro = estado.filtros.size > 0 || valorAtivo();
       const limpar = temFiltro ? `<button type="button" class="filtro-limpar" onclick="LF('${chave}').limpar()">✕ Limpar filtros</button>` : '';
       const info = temFiltro ? `<span class="filtro-info">Mostrando ${totalFiltrado} de ${totalGeral}</span>` : '';
       const chipsOrdem = ordens.map(o => chip(o.id === estado.ordem, o.label, `LF('${chave}').setOrdem('${o.id}')`)).join('');
-      box.innerHTML = `<div class="filtros-grupo">${blocos}${limpar}${info}</div>
+      // preserva o foco/cursor do campo de valor ao redesenhar enquanto a pessoa digita
+      const ativoEl = document.activeElement;
+      const refocar = ativoEl && ativoEl.id === `filtro-valor-ref-${chave}` ? { ini: ativoEl.selectionStart, fim: ativoEl.selectionEnd } : null;
+      box.innerHTML = `<div class="filtros-grupo">${blocos}${blocoValor}${limpar}${info}</div>
         <div class="filtros-grupo"><span class="filtro-rotulo">Ordenar</span>${chipsOrdem}</div>`;
+      if (refocar) {
+        const novo = document.getElementById(`filtro-valor-ref-${chave}`);
+        if (novo) { novo.focus(); try { novo.setSelectionRange(refocar.ini, refocar.fim); } catch (e) {} }
+      }
     },
   };
   LISTAS_FILTRAVEIS[chave] = api;
@@ -3338,8 +3367,8 @@ const ORDENS_RACKS = [
 // exemplo para o futuro (filtro novo): { id: 'sem-valor', label: 'Sem VP', grupo: 'valor', fn: m => !(Number(m.valor) > 0) }
 // (grupo novo também precisa existir no objeto de grupos da lista)
 
-criarListaFiltravel({ chave: 'meus-miners',      boxId: 'filtros-meus-miners',      grupos: GRUPOS_STATUS_VENDA, filtros: [...FILTROS_STATUS, ...FILTROS_VENDA], ordens: ORDENS_MINERS, onChange: () => renderMiners() });
-criarListaFiltravel({ chave: 'meus-racks',       boxId: 'filtros-meus-racks',       grupos: GRUPOS_STATUS_VENDA, filtros: [...FILTROS_STATUS, ...FILTROS_VENDA], ordens: ORDENS_RACKS,  onChange: () => renderRacks() });
+criarListaFiltravel({ chave: 'meus-miners',      boxId: 'filtros-meus-miners',      grupos: GRUPOS_STATUS_VENDA, filtros: [...FILTROS_STATUS, ...FILTROS_VENDA], ordens: ORDENS_MINERS, onChange: () => renderMiners(), valorPago: true });
+criarListaFiltravel({ chave: 'meus-racks',       boxId: 'filtros-meus-racks',       grupos: GRUPOS_STATUS_VENDA, filtros: [...FILTROS_STATUS, ...FILTROS_VENDA], ordens: ORDENS_RACKS,  onChange: () => renderRacks(), valorPago: true });
 criarListaFiltravel({ chave: 'catalogo-miners',  boxId: 'filtros-catalogo-miners',  grupos: GRUPOS_SO_VENDA,     filtros: FILTROS_VENDA,                          ordens: ORDENS_MINERS, onChange: () => renderCatalogoMiners() });
 criarListaFiltravel({ chave: 'catalogo-racks',   boxId: 'filtros-catalogo-racks',   grupos: GRUPOS_SO_VENDA,     filtros: FILTROS_VENDA,                          ordens: ORDENS_RACKS,  onChange: () => renderCatalogoRacks() });
 
