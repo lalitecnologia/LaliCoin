@@ -113,6 +113,10 @@
     box-shadow:0 0 14px rgba(232,185,62,0.35);
   }
   .brand-name{font-weight:600; font-size:17px; letter-spacing:0.2px;}
+  .brand-user{display:flex; flex-direction:column; min-width:0; max-width:34vw; padding-left:10px; margin-left:2px; border-left:1px solid var(--border); line-height:1.25;}
+  .brand-user:empty{display:none;}
+  .brand-user .nome{font-size:12.5px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .brand-user .email{font-size:10.5px; color:var(--muted); font-family:'JetBrains Mono'; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .role-pill{
     font-size:11px; padding:4px 10px; border-radius:100px;
     border:1px solid var(--border); color:var(--muted);
@@ -576,6 +580,7 @@
       <div class="brand">
         <div class="coin">LC</div>
         <div class="brand-name">LaliCoin</div>
+        <div class="brand-user" id="brand-user" title=""></div>
       </div>
       <div style="display:flex; align-items:center; gap:10px;">
         <span class="role-pill" id="plano-pill" style="display:none;"></span>
@@ -1205,7 +1210,7 @@
 /* =========================================================
    VERSÃO DO APP — aumente esse número a cada atualização
    ========================================================= */
-const APP_VERSION = 'v118';
+const APP_VERSION = 'v119';
 document.querySelectorAll('.version-tag').forEach(el => el.textContent = 'LaliCoin ' + APP_VERSION);
 document.querySelectorAll('.version-tag-top').forEach(el => el.textContent = APP_VERSION);
 
@@ -2566,6 +2571,7 @@ async function handleSalvarPerfil(e){
   }
 
   currentProfile = { ...currentProfile, nome, cpf, tipo: tipoNovo };
+  atualizarUsuarioTopo();
   document.getElementById('perfil-cpf').value = formatarCpf(cpf) || '';
   const pill = document.getElementById('role-pill');
   pill.textContent = tipoNovo === 'C' ? 'Criador' : 'Usuário';
@@ -2573,6 +2579,17 @@ async function handleSalvarPerfil(e){
 
   showToast(emailMudou ? 'Perfil salvo — confirme a troca de e-mail na caixa de entrada.' : 'Perfil atualizado.');
   return false;
+}
+
+// v119 — mostra nome e e-mail de quem está logado no topo, ao lado do ícone LaliCoin
+function atualizarUsuarioTopo(){
+  const box = document.getElementById('brand-user');
+  if (!box) return;
+  if (!currentUser){ box.innerHTML = ''; box.title = ''; return; }
+  const email = currentUser.email || currentProfile?.email || '';
+  const nome = (currentProfile?.nome || '').trim() || email;
+  box.innerHTML = `<span class="nome">${escapeHtml(nome)}</span>` + (email && email !== nome ? `<span class="email">${escapeHtml(email)}</span>` : '');
+  box.title = email ? `${nome} — ${email}` : nome;
 }
 
 // Atualiza o selo de plano no topo do app — mostra "Free" (com dias restantes) para quem
@@ -2605,6 +2622,7 @@ function atualizarPlanoPill(profile, isCreator){
 async function handleLogout(){
   await supabaseClient.auth.signOut();
   currentUser = null; currentProfile = null; myMiners = [];
+  atualizarUsuarioTopo();
   if (trialTimer){ clearInterval(trialTimer); trialTimer = null; }
   contatos = []; contatosPendentes = 0; atualizarBadgeContatos();
   document.getElementById('app').classList.remove('active');
@@ -2681,6 +2699,7 @@ async function onAuthReady(user){
   pill.textContent = isCreator ? 'Criador' : 'Usuário';
   pill.classList.toggle('creator', isCreator);
   atualizarPlanoPill(profile, isCreator);
+  atualizarUsuarioTopo();
   atualizarVisibilidadeAbasCatalogo(isCreator);
   if (isCreator) loadContatos();
 
@@ -3238,6 +3257,7 @@ async function loadMiners(){
 
 let editingMinerId = null;
 
+// v119 — nome e e-mail de quem está logado no topo, ao lado do ícone LaliCoin (atualizarUsuarioTopo).
 // v118 — filtro "Valor pago" (maior que / menor que) em Meus miners e Meus racks (opção valorPago: true).
 // v117 — componente único de filtros + ordens (padrão compartilhado por Meus miners, Meus racks,
 // Cadastro de miners e Cadastro de racks). Chips ligam/desligam, os filtros ligados se somam;
